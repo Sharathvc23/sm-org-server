@@ -6,19 +6,20 @@
       "0.3"
     ],
     "suite_digest": "sha256:dc16b6a2add91e96b86f569d979ca3b616e94bb17f27d5b35c4337a67587d669",
-    "completed_at": "2026-06-01T08:02:14.434450+00:00",
+    "completed_at": "2026-06-01T22:59:27.506265+00:00",
     "exit_status": 0,
     "passed": 61,
     "failed": 0,
     "skipped": 2,
     "xfailed": 0,
     "xpassed": 0,
+    "total_vectors": 63,
     "extensions": {
       "conformance.run.surface": "server",
       "conformance.server.target": "http://localhost:8099"
     }
   },
   "signed_by": "did:key:z6MkwQGupwBpCHCboDXxjcFtjdoXpxeyZuVTduJtyQiXZkDN",
-  "signed_at": "2026-06-01T08:02:14.434450+00:00",
-  "signature": "6qrW+s1l0ZIdOd+xaTel2+ZRQMOlGuIdZDwdvvH2nfy6zmxuDbIdY4aR7EmjiEdqpX9s9X+u3fKGzvPo61ECAQ=="
+  "signed_at": "2026-06-01T22:59:27.506265+00:00",
+  "signature": "5coGdG+w9tW/zRulOyoMJidyt4422ZHGq32sfxWpftIoV4Sn2GUvPQ6GXUn1kIpej7oWrf0exBrzSk+leJwHBg=="
 }
