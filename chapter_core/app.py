@@ -8,8 +8,10 @@ agent's intelligence and governance live above this, as product or plugins.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -77,6 +79,14 @@ def create_app(
         else _origins_from_env("CHAPTER_NONROTATABLE_ORIGINS", ())
     )
     _priv, _pub32, chapter_did = signing.generate_chapter_identity()
+    # The signed conformance badge, served publicly at /.well-known/conformance.json
+    # (the canonical URL across all chapters). Read once; absent → endpoint 404s and
+    # the well-known doc omits the pointer. CHAPTER_BADGE_PATH overrides the location.
+    badge_path = Path(os.environ.get("CHAPTER_BADGE_PATH", ".nanda/conformance.json"))
+    try:
+        conformance_badge_doc = json.loads(badge_path.read_text()) if badge_path.exists() else None
+    except (OSError, ValueError):
+        conformance_badge_doc = None
     app = FastAPI(title="chapter-core")
 
     @app.get("/health")
@@ -259,7 +269,7 @@ def create_app(
 
     @app.get("/.well-known/nanda-agent.json")
     def well_known() -> dict[str, object]:
-        return {
+        doc: dict[str, object] = {
             "agent_id": chapter_id,
             "did": chapter_did,
             "facts_url": f"{base_url}/.well-known/agent-facts.json",
@@ -267,6 +277,16 @@ def create_app(
             "registries": {},
             "protocol_versions": ["0.2", "0.3"],
         }
+        if conformance_badge_doc is not None:
+            doc["conformance"] = f"{base_url}/.well-known/conformance.json"
+        return doc
+
+    @app.get("/.well-known/conformance.json")
+    def conformance() -> JSONResponse:
+        """The chapter's signed conformance badge — public, no auth, offline-verifiable."""
+        if conformance_badge_doc is None:
+            raise HTTPException(status_code=404, detail="no conformance badge published")
+        return JSONResponse(conformance_badge_doc)
 
     @app.get("/api/federation")
     def federation() -> dict[str, object]:
