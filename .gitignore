@@ -14,3 +14,7 @@ venv/
 .coverage
 htmlcov/
 coverage/
+
+# Agent tooling (never commit dev artifacts)
+.claude/
+.DS_Store
