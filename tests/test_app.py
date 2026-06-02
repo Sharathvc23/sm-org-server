@@ -241,3 +241,24 @@ def test_nonrotatable_origin_cannot_rotate() -> None:
     })
     out = c.post("/api/members/rotate", json={"agent_id": "m", "chapter_id": CHAPTER}).json()
     assert "may not self-rotate" in out["error"]
+
+
+# --- conformance badge at the canonical well-known URL ----------------------
+
+
+def test_conformance_badge_served_and_advertised(tmp_path, monkeypatch) -> None:
+    badge = tmp_path / "conformance.json"
+    badge.write_text(json.dumps({"payload": {"runtime": "sm-chapter"}, "signature": "sig"}))
+    monkeypatch.setenv("CHAPTER_BADGE_PATH", str(badge))
+    c = TestClient(create_app(store=SqliteStore(), chapter_id=CHAPTER))
+    r = c.get("/.well-known/conformance.json")
+    assert r.status_code == 200 and r.json()["payload"]["runtime"] == "sm-chapter"
+    wk = c.get("/.well-known/nanda-agent.json").json()
+    assert wk["conformance"].endswith("/.well-known/conformance.json")
+
+
+def test_conformance_badge_404_and_unadvertised_when_absent(monkeypatch) -> None:
+    monkeypatch.setenv("CHAPTER_BADGE_PATH", "/nonexistent/conformance.json")
+    c = TestClient(create_app(store=SqliteStore(), chapter_id=CHAPTER))
+    assert c.get("/.well-known/conformance.json").status_code == 404
+    assert "conformance" not in c.get("/.well-known/nanda-agent.json").json()
