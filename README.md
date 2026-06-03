@@ -23,7 +23,8 @@ That's a federating chapter with a SQLite backend, an Ed25519 identity, a trust 
 | `GET /api/agents/{id}/trust` | Trust dossier: score, tier, history |
 | `GET /api/surfaces/{id}` | A2UI surface envelope (the wire shape every renderer agrees on) |
 | `GET /api/federation` | Federation overview + per-peer member views |
-| `GET /.well-known/nanda-agent.json` | Discovery substrate for peers (did, facts_url, registries) |
+| `GET /.well-known/nanda-agent.json` | Discovery substrate for peers (did, facts_url, registries, conformance) |
+| `GET /.well-known/conformance.json` | The signed conformance badge — public, no-auth, offline-verifiable |
 
 ## Why it's this small
 
@@ -61,7 +62,7 @@ The default `SqliteStore` is zero-config and file-backed. Any class satisfying t
 
 ## Conformance
 
-`sm-chapter` ships a signed conformance badge at `.nanda/conformance.json` — an Ed25519-signed record of which suite it passed, pinned to that suite's vector digest. See the [conformance toolkit](https://github.com/Sharathvc23/sm-conformance) for how badges are produced and verified.
+`sm-chapter` ships a signed conformance badge at `.nanda/conformance.json` — an Ed25519-signed record of which suite it passed, pinned to that suite's vector digest — and serves it publicly at the canonical URL **`GET /.well-known/conformance.json`** (unauthenticated, offline-verifiable; advertised via a `conformance` pointer in the well-known doc). Set `CHAPTER_BADGE_PATH` to point at your badge file; absent → the endpoint 404s. See the [conformance toolkit](https://github.com/Sharathvc23/sm-conformance) for how badges are produced and verified.
 
 ## Development
 
