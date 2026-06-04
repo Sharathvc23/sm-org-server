@@ -33,6 +33,11 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["chapter_core"]
 
+# sm-arp is pinned by git tag (a direct reference). hatchling refuses direct
+# references in project.dependencies unless this is opted in.
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.ruff]
 line-length = 110
 target-version = "py311"
