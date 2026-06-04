@@ -49,3 +49,35 @@ class ChapterStore(Protocol):
     def trust_history(self, agent_id: str) -> list[dict[str, object]]:
         """Ordered list of {kind, delta} events for the agent."""
         ...
+
+    # ── ARP Issuer Log (spec §10.2) ─────────────────────────────────
+    # The chapter persists every receipt it accepts. The receipt envelope
+    # (build/sign/verify/chain-link) is owned by `sm_arp`; this seam owns only
+    # *where the bytes live*, so a Postgres-backed chapter keeps receipts in
+    # Postgres alongside members — not in a side file.
+
+    def append_receipt(self, receipt: dict[str, object]) -> str:
+        """Persist a verified receipt; return the chain link it produces.
+
+        Idempotent on (issuer_did, receipt_id) — re-appending replaces rather
+        than duplicating (the spec's replay floor).
+        """
+        ...
+
+    def get_receipt(self, receipt_id: str) -> dict[str, object] | None: ...
+
+    def get_receipt_by_chain_link(
+        self, issuer_did: str, chain_link: str
+    ) -> dict[str, object] | None:
+        """Resolve a receipt by its per-issuer chain link — used to find the
+        predecessor a new receipt's ``previous_receipt_hash`` points at. Scoped
+        by issuer because the hash chain is per-issuer (ARP §6.4)."""
+        ...
+
+    def list_receipts(self, limit: int = 100) -> list[dict[str, object]]: ...
+
+    def list_receipts_for_principal(
+        self, principal_did: str, limit: int = 100
+    ) -> list[dict[str, object]]: ...
+
+    def receipt_count(self) -> int: ...
