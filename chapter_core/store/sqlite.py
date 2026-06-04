@@ -6,8 +6,11 @@ vectors in the conformance suite) are stored as inert data, never interpolated.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
+
+from sm_arp import chain_link
 
 from chapter_core.store.base import Member
 
@@ -31,6 +34,20 @@ CREATE TABLE IF NOT EXISTS trust_events (
     delta    REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_trust_agent ON trust_events (agent_id);
+CREATE TABLE IF NOT EXISTS receipts (
+    receipt_id            TEXT NOT NULL,
+    issuer_did            TEXT NOT NULL,
+    principal_did         TEXT NOT NULL,
+    issued_at             TEXT NOT NULL,
+    category              TEXT,
+    counterparty_did      TEXT,
+    previous_receipt_hash TEXT,
+    chain_link            TEXT NOT NULL,
+    receipt_json          TEXT NOT NULL,
+    PRIMARY KEY (issuer_did, receipt_id)
+);
+CREATE INDEX IF NOT EXISTS idx_receipts_principal ON receipts (principal_did, issued_at);
+CREATE INDEX IF NOT EXISTS idx_receipts_chain ON receipts (issuer_did, chain_link);
 """
 
 
@@ -112,3 +129,63 @@ class SqliteStore:
                 (agent_id,),
             ).fetchall()
         return [{"kind": k, "delta": d} for k, d in rows]
+
+    # ── ARP Issuer Log ─────────────────────────────────────────────
+
+    def append_receipt(self, receipt: dict[str, object]) -> str:
+        link: str = chain_link(receipt)
+        action = receipt.get("action")
+        action = action if isinstance(action, dict) else {}
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO receipts (receipt_id, issuer_did, principal_did, "
+                "issued_at, category, counterparty_did, previous_receipt_hash, chain_link, "
+                "receipt_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    receipt["receipt_id"],
+                    receipt["issuer_did"],
+                    receipt["principal_did"],
+                    receipt["issued_at"],
+                    action.get("category"),
+                    action.get("counterparty_did"),
+                    receipt.get("previous_receipt_hash"),
+                    link,
+                    json.dumps(receipt, separators=(",", ":")),
+                ),
+            )
+            self._conn.commit()
+        return link
+
+    def _receipts_query(
+        self, where: str, args: tuple[object, ...], limit: int
+    ) -> list[dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT receipt_json FROM receipts {where} ORDER BY issued_at DESC LIMIT ?",  # noqa: S608
+                (*args, int(limit)),
+            ).fetchall()
+        return [json.loads(r[0]) for r in rows]
+
+    def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
+        rows = self._receipts_query("WHERE receipt_id = ?", (receipt_id,), 1)
+        return rows[0] if rows else None
+
+    def get_receipt_by_chain_link(
+        self, issuer_did: str, chain_link: str
+    ) -> dict[str, object] | None:
+        rows = self._receipts_query(
+            "WHERE issuer_did = ? AND chain_link = ?", (issuer_did, chain_link), 1
+        )
+        return rows[0] if rows else None
+
+    def list_receipts(self, limit: int = 100) -> list[dict[str, object]]:
+        return self._receipts_query("", (), limit)
+
+    def list_receipts_for_principal(
+        self, principal_did: str, limit: int = 100
+    ) -> list[dict[str, object]]:
+        return self._receipts_query("WHERE principal_did = ?", (principal_did,), limit)
+
+    def receipt_count(self) -> int:
+        with self._lock:
+            return int(self._conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0])
