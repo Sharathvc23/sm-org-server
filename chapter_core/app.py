@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sm_arp import verify_receipt
 
 from chapter_core import signing, trust
 from chapter_core.store.base import ChapterStore, Member
@@ -47,7 +48,23 @@ def _surface(page_id: str, *components: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _receipts_surface(receipts: list[dict[str, object]]) -> dict[str, object]:
+    """A live A2UI view of the Issuer Log — the chapter's accepted receipts."""
+    comps: list[dict[str, object]] = [
+        {"id": "h", "component": "Heading", "text": "Issuer Log", "level": 1},
+    ]
+    if not receipts:
+        comps.append({"id": "empty", "component": "Text", "text": "No receipts yet."})
+    for idx, r in enumerate(receipts):
+        action = r.get("action")
+        action = action if isinstance(action, dict) else {}
+        line = f"{r.get('issued_at', '')} · {action.get('category', '')} · {action.get('human_summary', '')}"
+        comps.append({"id": f"r{idx}", "component": "Text", "text": line})
+    return _surface("receipts", *comps)
+
+
 AUTH_GATED_SURFACES = {"today"}
+DYNAMIC_SURFACES = {"receipts"}
 
 PUBLIC_SURFACES = {
     "docs": _surface(
@@ -257,11 +274,64 @@ def create_app(
         # Score is the authoritative SUM of deltas, so stored == recomputed by construction.
         return {"drift_count": 0, "drifts": []}
 
+    @app.post("/api/receipts")
+    async def ingest_receipt(req: Request) -> JSONResponse:
+        """Verify and persist one ARP receipt to the Issuer Log.
+
+        The receipt is self-authenticating — its Ed25519 signature over the
+        canonical bytes binds it to ``issuer_did`` no matter who POSTs it — so
+        the chapter trusts the envelope, not the transport. `sm_arp` owns the
+        verification; on failure nothing is written.
+        """
+        try:
+            receipt = await req.json()
+        except Exception:
+            return JSONResponse({"error": "body is not valid JSON"}, status_code=400)
+        if not isinstance(receipt, dict):
+            return JSONResponse({"error": "receipt must be a JSON object"}, status_code=400)
+
+        # Resolve the per-issuer predecessor for the hash chain (§6.4), if declared.
+        prev = receipt.get("previous_receipt_hash")
+        prior = None
+        if prev:
+            issuer = receipt.get("issuer_did")
+            if isinstance(issuer, str) and isinstance(prev, str):
+                prior = store.get_receipt_by_chain_link(issuer, prev)
+
+        result = verify_receipt(receipt, mode="strict", prior=prior, check_chain=bool(prev))
+        if not result.ok:
+            # A receipt that fails verification is a bad payload, not a missing-auth
+            # request — mirror /api/members/rotate: HTTP 200 with an {"error": ...} body.
+            return JSONResponse({"error": f"{result.stage}: {result.detail}"})
+
+        link = store.append_receipt(receipt)
+        return JSONResponse(
+            {"accepted": True, "receipt_id": receipt["receipt_id"], "chain_link": link}
+        )
+
+    @app.get("/api/receipts/recent")
+    def recent_receipts(limit: int = 50, principal: str | None = None) -> dict[str, object]:
+        receipts = (
+            store.list_receipts_for_principal(principal, limit)
+            if principal
+            else store.list_receipts(limit)
+        )
+        return {"receipts": receipts, "total": store.receipt_count()}
+
+    @app.get("/api/receipts/{receipt_id}")
+    def get_receipt(receipt_id: str) -> JSONResponse:
+        receipt = store.get_receipt(receipt_id)
+        if receipt is None:
+            raise HTTPException(status_code=404, detail="unknown receipt")
+        return JSONResponse(receipt)
+
     @app.get("/api/surfaces/{page_id}")
     def surface(page_id: str) -> JSONResponse:
         if page_id in AUTH_GATED_SURFACES:
             # Per-principal surface (e.g. /today): no signed identity, no projection.
             raise HTTPException(status_code=403, detail="surface requires a signed request")
+        if page_id in DYNAMIC_SURFACES:
+            return JSONResponse(_receipts_surface(store.list_receipts(20)))
         envelope = PUBLIC_SURFACES.get(page_id)
         if envelope is None:
             raise HTTPException(status_code=404, detail="unknown surface")

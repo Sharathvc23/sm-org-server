@@ -16,6 +16,9 @@ dependencies = [
     "uvicorn>=0.27",
     "cryptography>=42",
     "base58>=2.1",
+    # The one canonical ARP receipt implementation (build/sign/verify/store).
+    # Pinned to a tag — a production runtime must not float on a moving main.
+    "sm-arp @ git+https://github.com/Sharathvc23/sm-arp.git@v0.1.1",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +44,13 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
+
+# sm_arp is fully type-hinted but does not yet ship a py.typed marker, so mypy
+# can't see its types across the install boundary. Treat it as an untyped
+# import rather than failing strict mode. (Follow-up: ship py.typed in sm-arp.)
+[[tool.mypy.overrides]]
+module = "sm_arp.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "-q --cov=chapter_core --cov-report=term-missing --cov-fail-under=80"
