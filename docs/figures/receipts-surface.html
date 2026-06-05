@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Issuer Log — sm-chapter</title>
+<style>
+  body{margin:0;background:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a}
+  .card{max-width:680px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;
+        box-shadow:0 1px 3px rgba(15,23,42,.06);overflow:hidden}
+  h1{font-size:18px;margin:0;padding:18px 22px;border-bottom:1px solid #eef2f6}
+  .r{display:grid;grid-template-columns:130px 1fr auto;gap:14px;align-items:center;
+     padding:14px 22px;border-bottom:1px solid #f1f5f9}
+  .r:last-child{border-bottom:0}
+  .cat{font:600 11px ui-monospace,Menlo,monospace;color:#3730a3;background:#eef2ff;
+       padding:3px 8px;border-radius:6px;justify-self:start}
+  .sum{font-size:14px} time{font:11px ui-monospace,Menlo,monospace;color:#94a3b8}
+  .empty{padding:22px;color:#94a3b8}
+  .cap{max-width:680px;margin:0 auto 40px;color:#64748b;font-size:12.5px;text-align:center}
+</style></head>
+<body>
+  <div class="card">
+      <h1>Issuer Log</h1>
+      <div class="r"><span class="cat">data_shared</span><span class="sum">Shared my calendar availability with the scheduling agent</span><time>2026-06-05T03:39:17Z</time></div>
+      <div class="r"><span class="cat">purchase</span><span class="sum">Bought 2 tickets to the community meetup</span><time>2026-06-05T03:39:17Z</time></div>
+      <div class="r"><span class="cat">message_sent</span><span class="sum">Answered a question in #introductions</span><time>2026-06-05T03:39:17Z</time></div>
+      <div class="r"><span class="cat">attestation_issued</span><span class="sum">Attested a useful intent response from member bob</span><time>2026-06-05T03:39:17Z</time></div>
+  </div>
+  <p class="cap">Rendered from the live <code>GET /api/surfaces/receipts</code> A2UI envelope (v0.10).</p>
+</body></html>

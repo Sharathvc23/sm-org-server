@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="440" viewBox="0 0 920 440" font-family="-apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <style>
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}
+      .title{font-size:15px;font-weight:700;fill:#0f172a}
+      .sub{font-size:11.5px;fill:#475569}
+      .lbl{font-size:11.5px;fill:#334155;font-weight:600}
+      .edge{stroke:#475569;stroke-width:1.6;fill:none}
+      .lib{fill:#eef2ff;stroke:#a5b4fc;stroke-width:1.5}
+      .badge{fill:#ecfdf5;stroke:#6ee7b7;stroke-width:1.5}
+      .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;fill:#3730a3}
+    </style>
+  </defs>
+
+  <text x="30" y="34" class="title" font-size="18">ARP receipts: one signed envelope, every runtime</text>
+
+  <!-- Member SDK -->
+  <rect class="box" x="30" y="70" width="250" height="150" rx="10"/>
+  <text x="46" y="98" class="title">sm-member-sdk</text>
+  <text x="46" y="120" class="sub">MemberAgent.record(action)</text>
+  <text x="46" y="140" class="sub">→ signs an ARP receipt</text>
+  <text x="46" y="160" class="sub">→ hash-chains it (§6.4)</text>
+  <text x="46" y="180" class="sub">→ appends to its Agency Log (§10.1)</text>
+  <text x="46" y="203" class="lbl">verify_receipt — checks counterparties</text>
+
+  <!-- Chapter -->
+  <rect class="box" x="640" y="70" width="250" height="150" rx="10"/>
+  <text x="656" y="98" class="title">sm-chapter</text>
+  <text x="656" y="120" class="sub">POST /api/receipts</text>
+  <text x="656" y="140" class="sub">verify → resolve prior → persist</text>
+  <text x="656" y="160" class="sub">Issuer Log (§10.2), via ChapterStore</text>
+  <text x="656" y="183" class="lbl">also emits: attestation_issued</text>
+  <text x="656" y="203" class="sub">issuer=chapter → counterparty=member</text>
+
+  <!-- arrow member -> chapter -->
+  <path class="edge" d="M280,135 L636,135" marker-end="url(#arrow)"/>
+  <text x="460" y="125" class="lbl" text-anchor="middle">signed receipt (self-authenticating)</text>
+  <text x="460" y="152" class="mono" text-anchor="middle">{"accepted": true, "chain_link": "sha256:…"}</text>
+
+  <!-- sm_arp library spanning under both -->
+  <rect class="lib" x="30" y="250" width="860" height="64" rx="10"/>
+  <text x="46" y="278" class="title">sm_arp — the one canonical receipt library</text>
+  <text x="46" y="300" class="sub">build · sign · verify · canonical-bytes (JCS / RFC 8785) · chain-link · Issuer/Agency Log — imported by both, so the envelope cannot drift</text>
+
+  <!-- reputation -->
+  <rect class="box" x="640" y="344" width="250" height="66" rx="10"/>
+  <text x="656" y="370" class="title">reputation</text>
+  <text x="656" y="392" class="sub">reads edges (issuer → counterparty)</text>
+  <path class="edge" d="M765,220 L765,344" marker-end="url(#arrow)"/>
+
+  <!-- badges -->
+  <rect class="badge" x="30" y="344" width="560" height="66" rx="10"/>
+  <text x="46" y="370" class="title">signed ARP conformance badges</text>
+  <text x="46" y="392" class="sub">each runtime: 22/22 vectors, run mechanically against its own surface · profile receipts-0.1 · rung-1 self-signed</text>
+</svg>
