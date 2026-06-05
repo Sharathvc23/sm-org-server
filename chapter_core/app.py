@@ -15,7 +15,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sm_arp import verify_receipt
+from sm_arp import Identity as ArpIdentity
+from sm_arp import build_action, issue_receipt, verify_receipt
 
 from chapter_core import signing, trust
 from chapter_core.store.base import ChapterStore, Member
@@ -95,7 +96,12 @@ def create_app(
         if nonrotatable_origins is not None
         else _origins_from_env("CHAPTER_NONROTATABLE_ORIGINS", ())
     )
-    _priv, _pub32, chapter_did = signing.generate_chapter_identity()
+    # The chapter's own ARP signing identity — it issues receipts for chapter
+    # actions, not just stores members'. Stable across restarts when CHAPTER_SEED
+    # (base64 of a 32-byte Ed25519 seed) is set; ephemeral otherwise.
+    _seed = os.environ.get("CHAPTER_SEED")
+    chapter_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
+    chapter_did = chapter_identity.did
     # The signed conformance badge, served publicly at /.well-known/conformance.json
     # (the canonical URL across all chapters). Read once; absent → endpoint 404s and
     # the well-known doc omits the pointer. CHAPTER_BADGE_PATH overrides the location.
@@ -105,6 +111,33 @@ def create_app(
     except (OSError, ValueError):
         conformance_badge_doc = None
     app = FastAPI(title="chapter-core")
+
+    def emit_chapter_receipt(
+        principal_did: str,
+        *,
+        category: str,
+        human_summary: str,
+        counterparty_did: str | None = None,
+        counterparty_label: str | None = None,
+    ) -> dict[str, object]:
+        """Sign and persist a receipt for a chapter action, into the Issuer Log.
+
+        The chapter is a first-class ARP issuer: actions it takes (attesting an
+        interaction, endorsing a member) produce signed receipts the same way a
+        member's do. The edge (issuer=chapter → counterparty) is what the
+        reputation layer reads, so this is how a chapter's endorsement counts.
+        """
+        action = build_action(
+            category=category,
+            human_summary=human_summary,
+            counterparty_did=counterparty_did,
+            counterparty_label=counterparty_label,
+        )
+        receipt: dict[str, object] = issue_receipt(
+            chapter_identity, principal_did=principal_did, action=action
+        )
+        store.append_receipt(receipt)
+        return receipt
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -245,7 +278,19 @@ def create_app(
 
         useful = trust.EVENT_DELTAS["intent_response_useful"]
         store.record_trust_event(agent_id, "intent_response_useful", useful)
-        return JSONResponse({"recorded": True, "agent_id": agent_id})
+        # The chapter attests the interaction with a signed receipt — its
+        # endorsement of the member (issuer=chapter → counterparty=member),
+        # which is what the reputation layer reads. Emission is default, not opt-in.
+        receipt = emit_chapter_receipt(
+            chapter_did,
+            category="attestation_issued",
+            human_summary=f"Attested a useful intent response from member {agent_id}"[:280],
+            counterparty_did=did_key_hdr,
+            counterparty_label=agent_id,
+        )
+        return JSONResponse(
+            {"recorded": True, "agent_id": agent_id, "receipt_id": receipt["receipt_id"]}
+        )
 
     @app.get("/api/agents/{agent_id}/trust")
     def trust_dossier(agent_id: str) -> JSONResponse:
