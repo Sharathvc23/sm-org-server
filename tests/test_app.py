@@ -281,3 +281,31 @@ def test_conformance_badge_404_and_unadvertised_when_absent(monkeypatch) -> None
     c = TestClient(create_app(store=SqliteStore(), chapter_id=CHAPTER))
     assert c.get("/.well-known/conformance.json").status_code == 404
     assert "conformance" not in c.get("/.well-known/nanda-agent.json").json()
+
+
+def test_arp_badge_served_and_advertised(tmp_path, monkeypatch) -> None:
+    badge = tmp_path / "arp-conformance.json"
+    badge.write_text(
+        json.dumps(
+            {
+                "payload": {
+                    "runtime": "sm-chapter",
+                    "extensions": {"arp.conformance.profile": "receipts-0.1"},
+                },
+                "signature": "sig",
+            }
+        )
+    )
+    monkeypatch.setenv("CHAPTER_ARP_BADGE_PATH", str(badge))
+    c = TestClient(create_app(store=SqliteStore(), chapter_id=CHAPTER))
+    r = c.get("/.well-known/arp-conformance.json")
+    assert r.status_code == 200 and r.json()["payload"]["runtime"] == "sm-chapter"
+    wk = c.get("/.well-known/nanda-agent.json").json()
+    assert wk["arp_conformance"].endswith("/.well-known/arp-conformance.json")
+
+
+def test_arp_badge_404_and_unadvertised_when_absent(monkeypatch) -> None:
+    monkeypatch.setenv("CHAPTER_ARP_BADGE_PATH", "/nonexistent/arp-conformance.json")
+    c = TestClient(create_app(store=SqliteStore(), chapter_id=CHAPTER))
+    assert c.get("/.well-known/arp-conformance.json").status_code == 404
+    assert "arp_conformance" not in c.get("/.well-known/nanda-agent.json").json()
