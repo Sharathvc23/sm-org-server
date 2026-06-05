@@ -102,14 +102,19 @@ def create_app(
     _seed = os.environ.get("CHAPTER_SEED")
     chapter_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
     chapter_did = chapter_identity.did
-    # The signed conformance badge, served publicly at /.well-known/conformance.json
-    # (the canonical URL across all chapters). Read once; absent → endpoint 404s and
-    # the well-known doc omits the pointer. CHAPTER_BADGE_PATH overrides the location.
-    badge_path = Path(os.environ.get("CHAPTER_BADGE_PATH", ".nanda/conformance.json"))
-    try:
-        conformance_badge_doc = json.loads(badge_path.read_text()) if badge_path.exists() else None
-    except (OSError, ValueError):
-        conformance_badge_doc = None
+    # Signed conformance badges, served publicly (the canonical URLs across all
+    # chapters). Read once; absent → endpoint 404s and the well-known doc omits the
+    # pointer. The wire badge attests the chapter protocol suite; the ARP badge
+    # attests the receipt suite (a distinct corpus, hence a distinct file).
+    def _load_badge(env_var: str, default: str) -> dict[str, object] | None:
+        path = Path(os.environ.get(env_var, default))
+        try:
+            return json.loads(path.read_text()) if path.exists() else None
+        except (OSError, ValueError):
+            return None
+
+    conformance_badge_doc = _load_badge("CHAPTER_BADGE_PATH", ".nanda/conformance.json")
+    arp_badge_doc = _load_badge("CHAPTER_ARP_BADGE_PATH", ".nanda/arp-conformance.json")
     app = FastAPI(title="chapter-core")
 
     def emit_chapter_receipt(
@@ -394,6 +399,8 @@ def create_app(
         }
         if conformance_badge_doc is not None:
             doc["conformance"] = f"{base_url}/.well-known/conformance.json"
+        if arp_badge_doc is not None:
+            doc["arp_conformance"] = f"{base_url}/.well-known/arp-conformance.json"
         return doc
 
     @app.get("/.well-known/conformance.json")
@@ -402,6 +409,13 @@ def create_app(
         if conformance_badge_doc is None:
             raise HTTPException(status_code=404, detail="no conformance badge published")
         return JSONResponse(conformance_badge_doc)
+
+    @app.get("/.well-known/arp-conformance.json")
+    def arp_conformance() -> JSONResponse:
+        """The chapter's signed ARP receipt-suite badge — public, offline-verifiable."""
+        if arp_badge_doc is None:
+            raise HTTPException(status_code=404, detail="no ARP conformance badge published")
+        return JSONResponse(arp_badge_doc)
 
     @app.get("/api/federation")
     def federation() -> dict[str, object]:
