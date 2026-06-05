@@ -1,0 +1,24 @@
+{
+  "payload": {
+    "schema_version": 1,
+    "runtime": "sm-chapter",
+    "protocol_versions": [
+      "0.1"
+    ],
+    "suite_digest": "sha256:d3610cf5bf09bef6dc49db731a8d93aaf3f553b0df8acf80790d152c8e9dc513",
+    "completed_at": "2026-06-05T02:22:37+00:00",
+    "exit_status": 0,
+    "passed": 22,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "total_vectors": 22,
+    "extensions": {
+      "arp.conformance.profile": "receipts-0.1"
+    }
+  },
+  "signed_by": "did:key:z6MkwQGupwBpCHCboDXxjcFtjdoXpxeyZuVTduJtyQiXZkDN",
+  "signed_at": "2026-06-05T02:22:37+00:00",
+  "signature": "olY2Vk5bQY0pHURABL8ie4I+yhb3khmk70WS6ZKFNv8vNs6plgtGdKp865+h0ff7aJfuOudAr1YvEVD61mAtCg=="
+}
