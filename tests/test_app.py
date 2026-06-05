@@ -182,6 +182,25 @@ def test_feedback_missing_headers_rejected(client: TestClient) -> None:
     assert client.post("/api/feedback", content="{}").status_code == 401
 
 
+def test_feedback_emits_a_chapter_signed_receipt(client: TestClient) -> None:
+    """The chapter is a first-class ARP issuer: recording feedback also signs a
+    receipt endorsing the member (issuer=chapter → counterparty=member)."""
+    from sm_arp import verify_receipt
+
+    chapter_did = client.get("/.well-known/nanda-agent.json").json()["did"]
+    priv, _pub, did = _keypair()
+    body = json.dumps({"kind": "intent_response_useful"})
+    resp = client.post("/api/feedback", content=body, headers=_signed_feedback_headers(priv, "m1", did, body))
+    rid = resp.json()["receipt_id"]
+
+    log = client.get("/api/receipts/recent").json()
+    receipt = next(r for r in log["receipts"] if r["receipt_id"] == rid)
+    assert receipt["issuer_did"] == chapter_did
+    assert receipt["action"]["counterparty_did"] == did  # the member it endorses
+    assert receipt["action"]["category"] == "attestation_issued"
+    assert verify_receipt(receipt).ok
+
+
 def test_feedback_stale_timestamp_rejected(client: TestClient) -> None:
     priv, _, did = _keypair()
     body = json.dumps({"kind": "x"})
