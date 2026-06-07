@@ -16,9 +16,10 @@ dependencies = [
     "uvicorn>=0.27",
     "cryptography>=42",
     "base58>=2.1",
-    # The one canonical ARP receipt implementation (build/sign/verify/store).
-    # Pinned to a tag — a production runtime must not float on a moving main.
-    "sm-arp @ git+https://github.com/Sharathvc23/sm-arp.git@v0.1.1",
+    # Required by the vendored sm_arp/ (the canonical ARP receipt impl). sm_arp
+    # itself is vendored in-tree rather than fetched as a git dependency — see
+    # VENDORED.md for provenance + the re-sync procedure.
+    "jcs>=0.2",
 ]
 
 [project.optional-dependencies]
@@ -31,31 +32,36 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["chapter_core"]
-
-# sm-arp is pinned by git tag (a direct reference). hatchling refuses direct
-# references in project.dependencies unless this is opted in.
-[tool.hatch.metadata]
-allow-direct-references = true
+# sm_arp is vendored in-tree (VENDORED.md), so ship it in the wheel — the
+# package then has no external, private-git dependency to fetch at install time.
+packages = ["chapter_core", "sm_arp"]
 
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+# Vendored upstream code — not held to this repo's lint rules.
+extend-exclude = ["sm_arp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.ruff.lint.isort]
+# sm_arp is vendored in-tree (VENDORED.md) but is upstream's library, not our
+# code — keep it sorted as a third-party import, not first-party.
+known-third-party = ["sm_arp"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
 
-# sm_arp is fully type-hinted but does not yet ship a py.typed marker, so mypy
-# can't see its types across the install boundary. Treat it as an untyped
-# import rather than failing strict mode. (Follow-up: ship py.typed in sm-arp.)
+# sm_arp is vendored in-tree (VENDORED.md). It is its upstream's code, so we
+# don't hold it to this repo's strict mode: skip following into it and treat its
+# symbols as untyped at the chapter_core boundary.
 [[tool.mypy.overrides]]
 module = "sm_arp.*"
 ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 addopts = "-q --cov=chapter_core --cov-report=term-missing --cov-fail-under=80"

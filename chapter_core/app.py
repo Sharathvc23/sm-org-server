@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from sm_arp import Identity as ArpIdentity
 from sm_arp import build_action, issue_receipt, verify_receipt
 
-from chapter_core import signing, trust
+from chapter_core import merkle, signing, trust
 from chapter_core.store.base import ChapterStore, Member
 from chapter_core.store.sqlite import SqliteStore
 
@@ -79,6 +79,18 @@ PUBLIC_SURFACES = {
         {"id": "body", "component": "Text", "text": "A running record of chapter activity."},
     ),
 }
+
+
+def _ordered_issuer_log(store: ChapterStore) -> list[dict[str, object]]:
+    """The whole Issuer Log in one canonical, total order.
+
+    Shared by the checkpoint and its proofs so leaf indices line up. Fetched
+    *uncapped* (``receipt_count()`` as the limit) so the checkpoint commits to
+    the entire log, never a silent prefix; ordered by ``(issued_at, receipt_id)``
+    — total and stable, independent of the store's own row order.
+    """
+    receipts = store.list_receipts(store.receipt_count())
+    return sorted(receipts, key=lambda r: (str(r.get("issued_at", "")), str(r.get("receipt_id", ""))))
 
 
 def create_app(
@@ -375,6 +387,41 @@ def create_app(
             raise HTTPException(status_code=404, detail="unknown receipt")
         return JSONResponse(receipt)
 
+    @app.get("/api/checkpoint")
+    def checkpoint() -> JSONResponse:
+        """A signed RFC 6962 Merkle checkpoint over the whole Issuer Log.
+
+        The receipt hash chain proves *forward* tamper-evidence within an issuer;
+        this proves *membership* across the whole log: anyone holding a receipt,
+        its inclusion proof, and this signed root can verify it offline.
+        """
+        receipts = _ordered_issuer_log(store)
+        return JSONResponse(merkle.build_checkpoint(receipts, identity=chapter_identity))
+
+    @app.get("/api/checkpoint/proof/{receipt_id}")
+    def checkpoint_proof(receipt_id: str) -> JSONResponse:
+        """RFC 6962 inclusion proof for one receipt against the current root.
+
+        Taken over the same ordering as ``/api/checkpoint`` so ``leaf_index``
+        lines up with the signed root.
+        """
+        receipts = _ordered_issuer_log(store)
+        index = next((i for i, r in enumerate(receipts) if r.get("receipt_id") == receipt_id), None)
+        if index is None:
+            raise HTTPException(status_code=404, detail="unknown receipt")
+        leaves = merkle.checkpoint_leaves(receipts)
+        path = merkle.inclusion_proof(leaves, index)
+        root = merkle.merkle_root(leaves)
+        return JSONResponse(
+            {
+                "receipt_id": receipt_id,
+                "leaf_index": index,
+                "tree_size": len(receipts),
+                "merkle_root": "sha256:" + root.hex(),
+                "audit_path": ["sha256:" + h.hex() for h in path],
+            }
+        )
+
     @app.get("/api/surfaces/{page_id}")
     def surface(page_id: str) -> JSONResponse:
         if page_id in AUTH_GATED_SURFACES:
@@ -394,6 +441,7 @@ def create_app(
             "did": chapter_did,
             "facts_url": f"{base_url}/.well-known/agent-facts.json",
             "a2a_url": f"{base_url}/api",
+            "checkpoint": f"{base_url}/api/checkpoint",
             "registries": {},
             "protocol_versions": ["0.2", "0.3"],
         }
