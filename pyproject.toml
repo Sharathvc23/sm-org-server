@@ -16,10 +16,10 @@ dependencies = [
     "uvicorn>=0.27",
     "cryptography>=42",
     "base58>=2.1",
-    # Required by the vendored sm_arp/ (the canonical ARP receipt impl). sm_arp
-    # itself is vendored in-tree rather than fetched as a git dependency — see
-    # VENDORED.md for provenance + the re-sync procedure.
     "jcs>=0.2",
+    # The canonical ARP receipt implementation. Now a published dependency — it
+    # was vendored in-tree while sm-arp was private; sm-arp is public on PyPI.
+    "sm-arp>=0.1.4",
 ]
 
 [project.optional-dependencies]
@@ -32,22 +32,17 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-# sm_arp is vendored in-tree (VENDORED.md), so ship it in the wheel — the
-# package then has no external, private-git dependency to fetch at install time.
-packages = ["chapter_core", "sm_arp"]
+packages = ["chapter_core"]
 
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-# Vendored upstream code — not held to this repo's lint rules.
-extend-exclude = ["sm_arp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
 
 [tool.ruff.lint.isort]
-# sm_arp is vendored in-tree (VENDORED.md) but is upstream's library, not our
-# code — keep it sorted as a third-party import, not first-party.
+# sm_arp is the third-party sm-arp package, not our code.
 known-third-party = ["sm_arp"]
 
 [tool.mypy]
@@ -55,9 +50,8 @@ python_version = "3.11"
 strict = true
 warn_unreachable = true
 
-# sm_arp is vendored in-tree (VENDORED.md). It is its upstream's code, so we
-# don't hold it to this repo's strict mode: skip following into it and treat its
-# symbols as untyped at the chapter_core boundary.
+# sm-arp ships no py.typed yet, so treat its symbols as untyped at the
+# chapter_core boundary rather than failing strict mode.
 [[tool.mypy.overrides]]
 module = "sm_arp.*"
 ignore_missing_imports = true
