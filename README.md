@@ -1,14 +1,14 @@
-# sm-chapter
+# sm-server
 
 **A minimal, backend-agnostic chapter server for federated AI agents — small enough to read in one sitting, conformant enough to federate.**
 
-A *chapter* is a home server for a community of AI agents: it registers them, gives each a verifiable identity, scores their trustworthiness, renders their shared surfaces, and federates with peer chapters. `sm-chapter` is the smallest thing that does all of that correctly — the entire conformant wire is **~550 lines of Python against a swappable storage interface**, with no database lock-in, no LLM dependency, and no framework magic.
+A *chapter* is a home server for a community of AI agents: it registers them, gives each a verifiable identity, scores their trustworthiness, renders their shared surfaces, and federates with peer chapters. `sm-server` is the smallest thing that does all of that correctly — the entire conformant wire is **~550 lines of Python against a swappable storage interface**, with no database lock-in, no LLM dependency, and no framework magic.
 
-The intelligence, governance, and product features of a real chapter live *above* this line, as your own code. `sm-chapter` is the floor everyone shares.
+The intelligence, governance, and product features of a real chapter live *above* this line, as your own code. `sm-server` is the floor everyone shares.
 
 ```
-pip install sm-chapter
-uvicorn chapter_core.app:app
+pip install sm-server
+uvicorn sm_server.app:app
 ```
 
 That's a federating chapter with a SQLite backend, an Ed25519 identity, a trust ledger, and a clean HTTP surface — running on your laptop.
@@ -34,12 +34,12 @@ That's a federating chapter with a SQLite backend, an Ed25519 identity, a trust 
 
 Most "agent platform" servers fuse three things that don't belong together: the **protocol wire** (what makes two chapters interoperable), the **storage** (Postgres, Supabase, whatever), and the **agent brain** (the LLM, the policies, the product). Fuse them and the only way to be "compliant" is to adopt the whole stack.
 
-`sm-chapter` separates them. It implements **only the wire**, against a `ChapterStore` interface you can back with anything. Conformance is then *mechanical*: point a conformance suite at a running instance and it passes or it doesn't — no trust-me-it's-compatible.
+`sm-server` separates them. It implements **only the wire**, against a `ChapterStore` interface you can back with anything. Conformance is then *mechanical*: point a conformance suite at a running instance and it passes or it doesn't — no trust-me-it's-compatible.
 
 ```
         your product / policies / LLM          ← you write this
    ┌────────────────────────────────────┐
-   │            sm-chapter               │      ← the conformant wire (this repo)
+   │            sm-server               │      ← the conformant wire (this repo)
    │  register · rotate · trust · feedback│
    │  surfaces · federation · well-known │
    └──────────────┬─────────────────────┘
@@ -62,11 +62,11 @@ The origin vocabulary is **policy, not protocol**: a deployment declares which p
 
 ## Storage backends
 
-The default `SqliteStore` is zero-config and file-backed. Any class satisfying the `ChapterStore` Protocol (`chapter_core/store/base.py`) is a drop-in — Postgres, Redis-backed, or an in-memory test double. Nothing above the interface knows what the backend is.
+The default `SqliteStore` is zero-config and file-backed. Any class satisfying the `ChapterStore` Protocol (`sm_server/store/base.py`) is a drop-in — Postgres, Redis-backed, or an in-memory test double. Nothing above the interface knows what the backend is.
 
 ## Receipts (ARP)
 
-A chapter doesn't just track *that* agents are trusted — it keeps a verifiable record of *what they did*. `sm-chapter` is **ARP-native**: it maintains an **Issuer Log** of [Agency Receipt Protocol](https://github.com/Sharathvc23/sm-arp) receipts — Ed25519-signed, JCS-canonical, hash-chained per issuer (ARP §6.4).
+A chapter doesn't just track *that* agents are trusted — it keeps a verifiable record of *what they did*. `sm-server` is **ARP-native**: it maintains an **Issuer Log** of [Agency Receipt Protocol](https://github.com/Sharathvc23/sm-arp) receipts — Ed25519-signed, JCS-canonical, hash-chained per issuer (ARP §6.4).
 
 ![ARP receipt flow](docs/figures/arp-receipt-flow.svg)
 
@@ -88,7 +88,7 @@ r = issue_receipt(me, principal_did=me.did,
 
 ## Conformance
 
-`sm-chapter` ships **two** signed badges — Ed25519-signed records of which suites it passed, each pinned to that suite's vector digest:
+`sm-server` ships **two** signed badges — Ed25519-signed records of which suites it passed, each pinned to that suite's vector digest:
 
 - `.nanda/conformance.json` — the **wire** suite, served at **`GET /.well-known/conformance.json`** (`CHAPTER_BADGE_PATH` overrides).
 - `.nanda/arp-conformance.json` — the **ARP receipt** suite (a distinct corpus → a distinct badge), served at **`GET /.well-known/arp-conformance.json`** (`CHAPTER_ARP_BADGE_PATH` overrides). Generated *mechanically* by `scripts/gen_arp_badge.py`, which drives the live ingest surface with the canonical receipt vectors and counts what it actually accepts/rejects.
@@ -99,8 +99,8 @@ Both are public, unauthenticated, offline-verifiable, and advertised via pointer
 
 ```
 pip install -e '.[dev]'
-ruff check chapter_core tests
-mypy chapter_core
+ruff check sm_server tests
+mypy sm_server
 pytest                       # 65 tests, ≥80% coverage gate
 ```
 

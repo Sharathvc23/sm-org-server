@@ -19,9 +19,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from sm_arp import Identity, build_action, issue_receipt
 
-from chapter_core.app import create_app
-from chapter_core.signing import derive_did_key
-from chapter_core.store.sqlite import SqliteStore
+from sm_server.app import create_app
+from sm_server.signing import derive_did_key
+from sm_server.store.sqlite import SqliteStore
 
 
 def _seed_receipts(client: TestClient) -> None:
@@ -65,7 +65,7 @@ def _render(components: list[dict]) -> str:
             )
     body = "\n      ".join(rows)
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Issuer Log — sm-chapter</title>
+<html lang="en"><head><meta charset="utf-8"><title>Issuer Log — sm-server</title>
 <style>
   body{{margin:0;background:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a}}
   .card{{max-width:680px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;

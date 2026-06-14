@@ -17,7 +17,7 @@ All notable changes to this project are documented here. The format follows
 - **Signed Merkle checkpoint** (`aae-checkpoint/0.1`) over the whole Issuer Log. The per-issuer hash chain proves *forward* tamper-evidence within an issuer; the checkpoint adds the *reverse* seam across the whole log — membership you can verify offline:
   - `GET /api/checkpoint` — an RFC 6962 Merkle root over every receipt (JCS-canonical leaf, including signature), signed by the chapter's ARP identity. Advertised in the well-known doc.
   - `GET /api/checkpoint/proof/{receipt_id}` — the inclusion proof for one receipt, taken over the same `(issued_at, receipt_id)` ordering as the root so leaf indices line up. A holder verifies membership against the signed root with no further chapter trust.
-  - Pure RFC 6962 lib in `chapter_core/merkle.py`, validated against independently-computed known answers; the checkpoint commits to the whole log (uncapped), never a silent prefix.
+  - Pure RFC 6962 lib in `sm_server/merkle.py`, validated against independently-computed known answers; the checkpoint commits to the whole log (uncapped), never a silent prefix.
 
 ## [0.1.0] — 2026-06-01
 

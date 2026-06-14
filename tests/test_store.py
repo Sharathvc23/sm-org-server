@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from chapter_core.store.base import Member
-from chapter_core.store.sqlite import SqliteStore
+from sm_server.store.base import Member
+from sm_server.store.sqlite import SqliteStore
 
 
 def _member(agent_id: str = "a1", origin: str = "sovereign") -> Member:

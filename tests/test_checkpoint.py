@@ -22,9 +22,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sm_arp import Identity, build_action, canonical_bytes, issue_receipt
 
-from chapter_core import merkle, signing
-from chapter_core.app import create_app
-from chapter_core.store.sqlite import SqliteStore
+from sm_server import merkle, signing
+from sm_server.app import create_app
+from sm_server.store.sqlite import SqliteStore
 
 
 @pytest.fixture

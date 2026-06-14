@@ -17,6 +17,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: ruff check chapter_core tests
-      - run: mypy chapter_core
+      - run: ruff check sm_server tests
+      - run: mypy sm_server
       - run: pytest

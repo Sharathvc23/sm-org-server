@@ -6,7 +6,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from chapter_core import signing
+from sm_server import signing
 
 
 def _raw_pub(priv: Ed25519PrivateKey) -> bytes:

@@ -16,8 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sm_arp import Identity, build_action, chain_link, issue_receipt
 
-from chapter_core.app import create_app
-from chapter_core.store.sqlite import SqliteStore
+from sm_server.app import create_app
+from sm_server.store.sqlite import SqliteStore
 
 
 @pytest.fixture

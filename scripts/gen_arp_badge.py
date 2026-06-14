@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate sm-chapter's signed ARP conformance badge — mechanically.
+"""Generate sm-server's signed ARP conformance badge — mechanically.
 
 Conformance is a *run*, not a declaration: this drives the live chapter's
 ingest surface with the canonical ARP receipt vector corpus and counts what it
@@ -27,8 +27,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from chapter_core.app import create_app
-from chapter_core.store.sqlite import SqliteStore
+from sm_server.app import create_app
+from sm_server.store.sqlite import SqliteStore
 
 ARP_REPO = Path(os.environ.get("ARP_REPO", str(Path.home() / "sm-arp"))).expanduser()
 sys.path.insert(0, str(ARP_REPO))  # for conformance.arp.badge + its vectors/schema
@@ -69,7 +69,7 @@ def main() -> int:
     print(f"ARP corpus: {passed} passed, {failed} failed, {skipped} skipped")
 
     badge = build_arp_badge(
-        "sm-chapter",
+        "sm-server",
         passed=passed,
         failed=failed,
         skipped=skipped,

@@ -18,9 +18,9 @@ from fastapi.responses import JSONResponse
 from sm_arp import Identity as ArpIdentity
 from sm_arp import build_action, issue_receipt, verify_receipt
 
-from chapter_core import merkle, signing, trust
-from chapter_core.store.base import ChapterStore, Member
-from chapter_core.store.sqlite import SqliteStore
+from sm_server import merkle, signing, trust
+from sm_server.store.base import ChapterStore, Member
+from sm_server.store.sqlite import SqliteStore
 
 ROTATION_WINDOW_S = 300
 SIGNED_REQUEST_WINDOW_S = 300

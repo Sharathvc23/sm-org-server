@@ -12,7 +12,7 @@ import threading
 
 from sm_arp import chain_link
 
-from chapter_core.store.base import Member
+from sm_server.store.base import Member
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS members (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chapter_core import trust
+from sm_server import trust
 
 
 @pytest.mark.parametrize(

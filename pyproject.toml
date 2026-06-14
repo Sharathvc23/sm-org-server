@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sm-chapter"
+name = "sm-server"
 version = "0.1.0"
 description = "Minimal, backend-agnostic, conformance-passing chapter server for federated AI agents."
 readme = "README.md"
@@ -19,7 +19,7 @@ dependencies = [
     "jcs>=0.2",
     # The canonical ARP receipt implementation. Now a published dependency — it
     # was vendored in-tree while sm-arp was private; sm-arp is public on PyPI.
-    "sm-arp>=0.1.4",
+    "sm-arp>=0.2.1",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +32,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["chapter_core"]
+packages = ["sm_server"]
 
 [tool.ruff]
 line-length = 110
@@ -51,16 +51,16 @@ strict = true
 warn_unreachable = true
 
 # sm-arp ships no py.typed yet, so treat its symbols as untyped at the
-# chapter_core boundary rather than failing strict mode.
+# sm_server boundary rather than failing strict mode.
 [[tool.mypy.overrides]]
 module = "sm_arp.*"
 ignore_missing_imports = true
 follow_imports = "skip"
 
 [tool.pytest.ini_options]
-addopts = "-q --cov=chapter_core --cov-report=term-missing --cov-fail-under=80"
+addopts = "-q --cov=sm_server --cov-report=term-missing --cov-fail-under=80"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-omit = ["chapter_core/__init__.py"]
+omit = ["sm_server/__init__.py"]
