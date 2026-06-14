@@ -114,6 +114,7 @@ def create_app(
     _seed = os.environ.get("CHAPTER_SEED")
     chapter_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
     chapter_did = chapter_identity.did
+
     # Signed conformance badges, served publicly (the canonical URLs across all
     # chapters). Read once; absent → endpoint 404s and the well-known doc omits the
     # pointer. The wire badge attests the chapter protocol suite; the ARP badge
@@ -305,9 +306,7 @@ def create_app(
             counterparty_did=did_key_hdr,
             counterparty_label=agent_id,
         )
-        return JSONResponse(
-            {"recorded": True, "agent_id": agent_id, "receipt_id": receipt["receipt_id"]}
-        )
+        return JSONResponse({"recorded": True, "agent_id": agent_id, "receipt_id": receipt["receipt_id"]})
 
     @app.get("/api/agents/{agent_id}/trust")
     def trust_dossier(agent_id: str) -> JSONResponse:
@@ -367,16 +366,12 @@ def create_app(
             return JSONResponse({"error": f"{result.stage}: {result.detail}"})
 
         link = store.append_receipt(receipt)
-        return JSONResponse(
-            {"accepted": True, "receipt_id": receipt["receipt_id"], "chain_link": link}
-        )
+        return JSONResponse({"accepted": True, "receipt_id": receipt["receipt_id"], "chain_link": link})
 
     @app.get("/api/receipts/recent")
     def recent_receipts(limit: int = 50, principal: str | None = None) -> dict[str, object]:
         receipts = (
-            store.list_receipts_for_principal(principal, limit)
-            if principal
-            else store.list_receipts(limit)
+            store.list_receipts_for_principal(principal, limit) if principal else store.list_receipts(limit)
         )
         return {"receipts": receipts, "total": store.receipt_count()}
 

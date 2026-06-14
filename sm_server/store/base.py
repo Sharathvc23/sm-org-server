@@ -66,9 +66,7 @@ class ChapterStore(Protocol):
 
     def get_receipt(self, receipt_id: str) -> dict[str, object] | None: ...
 
-    def get_receipt_by_chain_link(
-        self, issuer_did: str, chain_link: str
-    ) -> dict[str, object] | None:
+    def get_receipt_by_chain_link(self, issuer_did: str, chain_link: str) -> dict[str, object] | None:
         """Resolve a receipt by its per-issuer chain link — used to find the
         predecessor a new receipt's ``previous_receipt_hash`` points at. Scoped
         by issuer because the hash chain is per-issuer (ARP §6.4)."""

@@ -16,7 +16,7 @@ A build is conformant *iff* a conformance suite passes against a running instanc
 
 ## Contributions
 
-Issues and pull requests are welcome. A change that touches the wire must keep conformance green and update the badge. A change that touches storage or policy must keep the `ChapterStore` Protocol stable or version it explicitly. All code keeps the gate green: `ruff`, `mypy --strict`, and `pytest` at or above the coverage floor.
+Issues and pull requests are welcome. A change that touches the wire must keep conformance green and update the badge. A change that touches storage or policy must keep the `ChapterStore` Protocol stable or version it explicitly. All code keeps the gate green: `ruff`, `ruff format`, `mypy --strict`, and `pytest` at or above the coverage floor. Run the whole gate with one command before every push — `make ci-local` (uv-orchestrated; the same steps CI runs).
 
 ## Attribution
 

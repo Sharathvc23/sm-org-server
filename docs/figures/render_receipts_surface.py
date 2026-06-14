@@ -43,8 +43,11 @@ def _seed_receipts(client: TestClient) -> None:
         "/api/feedback",
         content=body,
         headers={
-            "X-Agent-ID": "bob", "X-Agent-DID-Key": did, "X-Agent-Sig-Scheme": "ed25519",
-            "X-Agent-Timestamp": ts, "X-Agent-Signature": sig,
+            "X-Agent-ID": "bob",
+            "X-Agent-DID-Key": did,
+            "X-Agent-Sig-Scheme": "ed25519",
+            "X-Agent-Timestamp": ts,
+            "X-Agent-Signature": sig,
         },
     )
 
@@ -53,7 +56,7 @@ def _render(components: list[dict]) -> str:
     rows = []
     for c in components:
         if c.get("component") == "Heading":
-            rows.append(f'<h1>{c["text"]}</h1>')
+            rows.append(f"<h1>{c['text']}</h1>")
         elif c.get("text") == "No receipts yet.":
             rows.append('<p class="empty">No receipts yet.</p>')
         else:

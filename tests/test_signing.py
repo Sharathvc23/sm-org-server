@@ -10,9 +10,7 @@ from sm_server import signing
 
 
 def _raw_pub(priv: Ed25519PrivateKey) -> bytes:
-    return priv.public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    )
+    return priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
 
 def test_did_key_round_trips() -> None:

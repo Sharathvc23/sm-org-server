@@ -100,8 +100,7 @@ class SqliteStore:
     def list_members(self, limit: int = 50) -> list[Member]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT agent_id, name, origin, public_key, did_key FROM members "
-                "ORDER BY agent_id LIMIT ?",
+                "SELECT agent_id, name, origin, public_key, did_key FROM members ORDER BY agent_id LIMIT ?",
                 (int(limit),),
             ).fetchall()
         return [Member(*r) for r in rows]
@@ -156,9 +155,7 @@ class SqliteStore:
             self._conn.commit()
         return link
 
-    def _receipts_query(
-        self, where: str, args: tuple[object, ...], limit: int
-    ) -> list[dict[str, object]]:
+    def _receipts_query(self, where: str, args: tuple[object, ...], limit: int) -> list[dict[str, object]]:
         with self._lock:
             rows = self._conn.execute(
                 f"SELECT receipt_json FROM receipts {where} ORDER BY issued_at DESC LIMIT ?",  # noqa: S608
@@ -170,20 +167,14 @@ class SqliteStore:
         rows = self._receipts_query("WHERE receipt_id = ?", (receipt_id,), 1)
         return rows[0] if rows else None
 
-    def get_receipt_by_chain_link(
-        self, issuer_did: str, chain_link: str
-    ) -> dict[str, object] | None:
-        rows = self._receipts_query(
-            "WHERE issuer_did = ? AND chain_link = ?", (issuer_did, chain_link), 1
-        )
+    def get_receipt_by_chain_link(self, issuer_did: str, chain_link: str) -> dict[str, object] | None:
+        rows = self._receipts_query("WHERE issuer_did = ? AND chain_link = ?", (issuer_did, chain_link), 1)
         return rows[0] if rows else None
 
     def list_receipts(self, limit: int = 100) -> list[dict[str, object]]:
         return self._receipts_query("", (), limit)
 
-    def list_receipts_for_principal(
-        self, principal_did: str, limit: int = 100
-    ) -> list[dict[str, object]]:
+    def list_receipts_for_principal(self, principal_did: str, limit: int = 100) -> list[dict[str, object]]:
         return self._receipts_query("WHERE principal_did = ?", (principal_did,), limit)
 
     def receipt_count(self) -> int:

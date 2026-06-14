@@ -13,10 +13,9 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
-      - run: ruff check sm_server tests
-      - run: mypy sm_server
-      - run: pytest
+      # Same gate as `make ci-local`, so green locally == green in CI.
+      - run: make ci-local

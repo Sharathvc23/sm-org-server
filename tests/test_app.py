@@ -31,9 +31,7 @@ def client() -> TestClient:
 
 def _keypair() -> tuple[Ed25519PrivateKey, bytes, str]:
     priv = Ed25519PrivateKey.generate()
-    pub = priv.public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    )
+    pub = priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     return priv, pub, signing.derive_did_key(pub)
 
 
@@ -111,15 +109,17 @@ def test_register_rejects_unknown_origin(client: TestClient) -> None:
 # --- rotation ----------------------------------------------------------------
 
 
-def _rotate_attestation(
-    priv: Ed25519PrivateKey, agent_id: str, new_pub: bytes, nonce: str
-) -> dict[str, str]:
+def _rotate_attestation(priv: Ed25519PrivateKey, agent_id: str, new_pub: bytes, nonce: str) -> dict[str, str]:
     new_b64 = base64.b64encode(new_pub).decode()
     ts = str(int(time.time()))
     canonical = f"ROTATE:{CHAPTER}:{agent_id}:{new_b64}:{ts}:{nonce}"
     return {
-        "agent_id": agent_id, "chapter_id": CHAPTER, "new_public_key_b64": new_b64,
-        "new_did_key": signing.derive_did_key(new_pub), "timestamp": ts, "nonce": nonce,
+        "agent_id": agent_id,
+        "chapter_id": CHAPTER,
+        "new_public_key_b64": new_b64,
+        "new_did_key": signing.derive_did_key(new_pub),
+        "timestamp": ts,
+        "nonce": nonce,
         "signature": base64.b64encode(priv.sign(canonical.encode())).decode(),
     }
 
@@ -144,8 +144,12 @@ def test_rotation_forged_signature_rejected(client: TestClient) -> None:
     new_b64 = base64.b64encode(new_pub).decode()
     ts = str(int(time.time()))
     att = {
-        "agent_id": "rot2", "chapter_id": CHAPTER, "new_public_key_b64": new_b64,
-        "timestamp": ts, "nonce": "n", "signature": base64.b64encode(b"\x00" * 64).decode(),
+        "agent_id": "rot2",
+        "chapter_id": CHAPTER,
+        "new_public_key_b64": new_b64,
+        "timestamp": ts,
+        "nonce": "n",
+        "signature": base64.b64encode(b"\x00" * 64).decode(),
     }
     assert "invalid signature" in client.post("/api/members/rotate", json=att).json()["error"]
 
@@ -249,15 +253,22 @@ def test_origins_are_configurable() -> None:
 
 def test_nonrotatable_origin_cannot_rotate() -> None:
     app = create_app(
-        store=SqliteStore(), chapter_id=CHAPTER,
-        origins={"managed"}, nonrotatable_origins={"managed"},
+        store=SqliteStore(),
+        chapter_id=CHAPTER,
+        origins={"managed"},
+        nonrotatable_origins={"managed"},
     )
     c = TestClient(app)
     priv, pub, _ = _keypair()
-    c.post("/api/members", json={
-        "agent_id": "m", "name": "m", "origin": "managed",
-        "public_key": base64.b64encode(pub).decode(),
-    })
+    c.post(
+        "/api/members",
+        json={
+            "agent_id": "m",
+            "name": "m",
+            "origin": "managed",
+            "public_key": base64.b64encode(pub).decode(),
+        },
+    )
     out = c.post("/api/members/rotate", json={"agent_id": "m", "chapter_id": CHAPTER}).json()
     assert "may not self-rotate" in out["error"]
 
