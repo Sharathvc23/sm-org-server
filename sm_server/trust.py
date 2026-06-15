@@ -1,7 +1,7 @@
 """Trust ledger arithmetic — server-set deltas, tier thresholds, score → tier.
 
-These tables are part of the protocol, not a tuning knob: a chapter that
-hand-rolls its own deltas or tiers diverges from every other chapter and the
+These tables are part of the protocol, not a tuning knob: a server that
+hand-rolls its own deltas or tiers diverges from every other server and the
 conformance suite catches it. The values are frozen per protocol major; the
 score of an agent is, by construction, the SUM of its event deltas — so an
 authoritative ledger has zero drift between stored and recomputed scores.
@@ -37,7 +37,7 @@ EVENT_DELTAS: dict[str, float] = {
     "inactive_decay": -1.0,
 }
 
-# Ascending by score_min; `federate` gates cross-chapter participation.
+# Ascending by score_min; `federate` gates cross-server participation.
 TIER_THRESHOLDS: list[TierRow] = [
     {"score_min": 0, "tier": "new", "open_calls_max": 1, "ttl_days": 7, "federate": False},
     {"score_min": 20, "tier": "established", "open_calls_max": 3, "ttl_days": 30, "federate": False},

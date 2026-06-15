@@ -1,6 +1,6 @@
 """The storage seam — the one interface the HTTP layer depends on.
 
-Everything a conformant chapter needs to persist goes through ``ChapterStore``.
+Everything a conformant server needs to persist goes through ``ServerStore``.
 The default backend is SQLite (zero-config, file-backed); Postgres or any other
 store is a drop-in that satisfies this Protocol. Nothing above this interface
 knows what the backend is — that is what makes the core self-hostable.
@@ -16,12 +16,12 @@ from typing import Protocol
 class Member:
     agent_id: str
     name: str
-    origin: str  # deployment-declared provenance, e.g. "sovereign" (see CHAPTER_ORIGINS)
+    origin: str  # deployment-declared provenance, e.g. "sovereign" (see SERVER_ORIGINS)
     public_key: str  # standard base64 of the 32-byte Ed25519 public key
     did_key: str
 
 
-class ChapterStore(Protocol):
+class ServerStore(Protocol):
     """Persistence the conformant protocol surface requires."""
 
     def get_member(self, agent_id: str) -> Member | None: ...
@@ -51,9 +51,9 @@ class ChapterStore(Protocol):
         ...
 
     # ── ARP Issuer Log (spec §10.2) ─────────────────────────────────
-    # The chapter persists every receipt it accepts. The receipt envelope
+    # The server persists every receipt it accepts. The receipt envelope
     # (build/sign/verify/chain-link) is owned by `sm_arp`; this seam owns only
-    # *where the bytes live*, so a Postgres-backed chapter keeps receipts in
+    # *where the bytes live*, so a Postgres-backed server keeps receipts in
     # Postgres alongside members — not in a side file.
 
     def append_receipt(self, receipt: dict[str, object]) -> str:

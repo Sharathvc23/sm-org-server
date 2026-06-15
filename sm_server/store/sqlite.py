@@ -1,4 +1,4 @@
-"""SQLite implementation of ChapterStore — the zero-config self-hostable default.
+"""SQLite implementation of ServerStore — the zero-config self-hostable default.
 
 Uses parameterized queries throughout, so hostile agent_ids (the R3 injection
 vectors in the conformance suite) are stored as inert data, never interpolated.

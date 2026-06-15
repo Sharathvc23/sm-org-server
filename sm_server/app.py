@@ -1,7 +1,7 @@
 """The conformant protocol surface — minimal, backend-agnostic.
 
-Implements exactly what `conformance/server/` requires of a chapter, against the
-`ChapterStore` interface. No LLM, no think-cycle, no specific database — the
+Implements exactly what `conformance/server/` requires of a server, against the
+`ServerStore` interface. No LLM, no think-cycle, no specific database — the
 agent's intelligence and governance live above this, as product or plugins.
 """
 
@@ -19,7 +19,7 @@ from sm_arp import Identity as ArpIdentity
 from sm_arp import build_action, issue_receipt, verify_receipt
 
 from sm_server import merkle, signing, trust
-from sm_server.store.base import ChapterStore, Member
+from sm_server.store.base import Member, ServerStore
 from sm_server.store.sqlite import SqliteStore
 
 ROTATION_WINDOW_S = 300
@@ -31,8 +31,22 @@ SIGNED_REQUEST_WINDOW_S = 300
 DEFAULT_ORIGINS = ("sovereign",)
 
 
-def _origins_from_env(var: str, default: tuple[str, ...]) -> set[str]:
-    declared = {o.strip() for o in os.environ.get(var, "").split(",") if o.strip()}
+def _env(*names: str, default: str | None = None) -> str | None:
+    """First set value among ``names`` (new name first, legacy aliases after).
+
+    Env vars were renamed ``CHAPTER_*`` → ``SERVER_*`` with the brand; the legacy
+    names are still read so already-deployed operators don't break.
+    """
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None:
+            return value
+    return default
+
+
+def _origins_from_env(var: str, legacy: str, default: tuple[str, ...]) -> set[str]:
+    raw = _env(var, legacy, default="") or ""
+    declared = {o.strip() for o in raw.split(",") if o.strip()}
     return declared or set(default)
 
 
@@ -50,7 +64,7 @@ def _surface(page_id: str, *components: dict[str, object]) -> dict[str, object]:
 
 
 def _receipts_surface(receipts: list[dict[str, object]]) -> dict[str, object]:
-    """A live A2UI view of the Issuer Log — the chapter's accepted receipts."""
+    """A live A2UI view of the Issuer Log — the server's accepted receipts."""
     comps: list[dict[str, object]] = [
         {"id": "h", "component": "Heading", "text": "Issuer Log", "level": 1},
     ]
@@ -70,18 +84,18 @@ DYNAMIC_SURFACES = {"receipts"}
 PUBLIC_SURFACES = {
     "docs": _surface(
         "docs",
-        {"id": "h", "component": "Heading", "text": "Chapter documentation", "level": 1},
+        {"id": "h", "component": "Heading", "text": "Server documentation", "level": 1},
         {"id": "body", "component": "Markdown", "text": "## Joining\n\nRegister, then sign your requests."},
     ),
     "chronicle": _surface(
         "chronicle",
-        {"id": "h", "component": "Heading", "text": "Chapter chronicle", "level": 1},
-        {"id": "body", "component": "Text", "text": "A running record of chapter activity."},
+        {"id": "h", "component": "Heading", "text": "Server chronicle", "level": 1},
+        {"id": "body", "component": "Text", "text": "A running record of server activity."},
     ),
 }
 
 
-def _ordered_issuer_log(store: ChapterStore) -> list[dict[str, object]]:
+def _ordered_issuer_log(store: ServerStore) -> list[dict[str, object]]:
     """The whole Issuer Log in one canonical, total order.
 
     Shared by the checkpoint and its proofs so leaf indices line up. Fetched
@@ -94,43 +108,52 @@ def _ordered_issuer_log(store: ChapterStore) -> list[dict[str, object]]:
 
 
 def create_app(
-    store: ChapterStore | None = None,
+    store: ServerStore | None = None,
     chapter_id: str | None = None,
     origins: set[str] | None = None,
     nonrotatable_origins: set[str] | None = None,
 ) -> FastAPI:
     store = store or SqliteStore()
-    chapter_id = chapter_id or os.environ.get("CHAPTER_ID", "chapter-core")
-    base_url = os.environ.get("CHAPTER_PUBLIC_URL", "https://chapter.local").rstrip("/")
-    valid_origins = origins if origins is not None else _origins_from_env("CHAPTER_ORIGINS", DEFAULT_ORIGINS)
+    # `chapter_id` is the frozen wire field (the server's identifier on the wire); the
+    # env var that sets it is the new `SERVER_ID` (legacy `CHAPTER_ID` still honored).
+    chapter_id = chapter_id or _env("SERVER_ID", "CHAPTER_ID", default="sm-server") or "sm-server"
+    _public_url = _env("SERVER_PUBLIC_URL", "CHAPTER_PUBLIC_URL", default="https://server.local") or ""
+    base_url = _public_url.rstrip("/")
+    valid_origins = (
+        origins
+        if origins is not None
+        else _origins_from_env("SERVER_ORIGINS", "CHAPTER_ORIGINS", DEFAULT_ORIGINS)
+    )
     nonrotatable = (
         nonrotatable_origins
         if nonrotatable_origins is not None
-        else _origins_from_env("CHAPTER_NONROTATABLE_ORIGINS", ())
+        else _origins_from_env("SERVER_NONROTATABLE_ORIGINS", "CHAPTER_NONROTATABLE_ORIGINS", ())
     )
-    # The chapter's own ARP signing identity — it issues receipts for chapter
-    # actions, not just stores members'. Stable across restarts when CHAPTER_SEED
+    # The server's own ARP signing identity — it issues receipts for server
+    # actions, not just stores members'. Stable across restarts when SERVER_SEED
     # (base64 of a 32-byte Ed25519 seed) is set; ephemeral otherwise.
-    _seed = os.environ.get("CHAPTER_SEED")
-    chapter_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
-    chapter_did = chapter_identity.did
+    _seed = _env("SERVER_SEED", "CHAPTER_SEED")
+    server_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
+    server_did = server_identity.did
 
     # Signed conformance badges, served publicly (the canonical URLs across all
-    # chapters). Read once; absent → endpoint 404s and the well-known doc omits the
-    # pointer. The wire badge attests the chapter protocol suite; the ARP badge
+    # servers). Read once; absent → endpoint 404s and the well-known doc omits the
+    # pointer. The wire badge attests the server protocol suite; the ARP badge
     # attests the receipt suite (a distinct corpus, hence a distinct file).
-    def _load_badge(env_var: str, default: str) -> dict[str, object] | None:
-        path = Path(os.environ.get(env_var, default))
+    def _load_badge(env_var: str, legacy_var: str, default: str) -> dict[str, object] | None:
+        path = Path(_env(env_var, legacy_var, default=default) or default)
         try:
             return json.loads(path.read_text()) if path.exists() else None
         except (OSError, ValueError):
             return None
 
-    conformance_badge_doc = _load_badge("CHAPTER_BADGE_PATH", ".nanda/conformance.json")
-    arp_badge_doc = _load_badge("CHAPTER_ARP_BADGE_PATH", ".nanda/arp-conformance.json")
-    app = FastAPI(title="chapter-core")
+    conformance_badge_doc = _load_badge("SERVER_BADGE_PATH", "CHAPTER_BADGE_PATH", ".nanda/conformance.json")
+    arp_badge_doc = _load_badge(
+        "SERVER_ARP_BADGE_PATH", "CHAPTER_ARP_BADGE_PATH", ".nanda/arp-conformance.json"
+    )
+    app = FastAPI(title="sm-server")
 
-    def emit_chapter_receipt(
+    def emit_server_receipt(
         principal_did: str,
         *,
         category: str,
@@ -138,12 +161,12 @@ def create_app(
         counterparty_did: str | None = None,
         counterparty_label: str | None = None,
     ) -> dict[str, object]:
-        """Sign and persist a receipt for a chapter action, into the Issuer Log.
+        """Sign and persist a receipt for a server action, into the Issuer Log.
 
-        The chapter is a first-class ARP issuer: actions it takes (attesting an
+        The server is a first-class ARP issuer: actions it takes (attesting an
         interaction, endorsing a member) produce signed receipts the same way a
-        member's do. The edge (issuer=chapter → counterparty) is what the
-        reputation layer reads, so this is how a chapter's endorsement counts.
+        member's do. The edge (issuer=server → counterparty) is what the
+        reputation layer reads, so this is how a server's endorsement counts.
         """
         action = build_action(
             category=category,
@@ -152,7 +175,7 @@ def create_app(
             counterparty_label=counterparty_label,
         )
         receipt: dict[str, object] = issue_receipt(
-            chapter_identity, principal_did=principal_did, action=action
+            server_identity, principal_did=principal_did, action=action
         )
         store.append_receipt(receipt)
         return receipt
@@ -296,11 +319,11 @@ def create_app(
 
         useful = trust.EVENT_DELTAS["intent_response_useful"]
         store.record_trust_event(agent_id, "intent_response_useful", useful)
-        # The chapter attests the interaction with a signed receipt — its
-        # endorsement of the member (issuer=chapter → counterparty=member),
+        # The server attests the interaction with a signed receipt — its
+        # endorsement of the member (issuer=server → counterparty=member),
         # which is what the reputation layer reads. Emission is default, not opt-in.
-        receipt = emit_chapter_receipt(
-            chapter_did,
+        receipt = emit_server_receipt(
+            server_did,
             category="attestation_issued",
             human_summary=f"Attested a useful intent response from member {agent_id}"[:280],
             counterparty_did=did_key_hdr,
@@ -341,7 +364,7 @@ def create_app(
 
         The receipt is self-authenticating — its Ed25519 signature over the
         canonical bytes binds it to ``issuer_did`` no matter who POSTs it — so
-        the chapter trusts the envelope, not the transport. `sm_arp` owns the
+        the server trusts the envelope, not the transport. `sm_arp` owns the
         verification; on failure nothing is written.
         """
         try:
@@ -391,7 +414,7 @@ def create_app(
         its inclusion proof, and this signed root can verify it offline.
         """
         receipts = _ordered_issuer_log(store)
-        return JSONResponse(merkle.build_checkpoint(receipts, identity=chapter_identity))
+        return JSONResponse(merkle.build_checkpoint(receipts, identity=server_identity))
 
     @app.get("/api/checkpoint/proof/{receipt_id}")
     def checkpoint_proof(receipt_id: str) -> JSONResponse:
@@ -433,7 +456,7 @@ def create_app(
     def well_known() -> dict[str, object]:
         doc: dict[str, object] = {
             "agent_id": chapter_id,
-            "did": chapter_did,
+            "did": server_did,
             "facts_url": f"{base_url}/.well-known/agent-facts.json",
             "a2a_url": f"{base_url}/api",
             "checkpoint": f"{base_url}/api/checkpoint",
@@ -448,26 +471,26 @@ def create_app(
 
     @app.get("/.well-known/conformance.json")
     def conformance() -> JSONResponse:
-        """The chapter's signed conformance badge — public, no auth, offline-verifiable."""
+        """The server's signed conformance badge — public, no auth, offline-verifiable."""
         if conformance_badge_doc is None:
             raise HTTPException(status_code=404, detail="no conformance badge published")
         return JSONResponse(conformance_badge_doc)
 
     @app.get("/.well-known/arp-conformance.json")
     def arp_conformance() -> JSONResponse:
-        """The chapter's signed ARP receipt-suite badge — public, offline-verifiable."""
+        """The server's signed ARP receipt-suite badge — public, offline-verifiable."""
         if arp_badge_doc is None:
             raise HTTPException(status_code=404, detail="no ARP conformance badge published")
         return JSONResponse(arp_badge_doc)
 
     @app.get("/api/federation")
     def federation() -> dict[str, object]:
-        # v0.1 is a solo, federation-ready chapter: no peers wired yet, shape is final.
-        chapters: dict[str, object] = {}
+        # v0.1 is a solo, federation-ready server: no peers wired yet, shape is final.
+        servers: dict[str, object] = {}
         return {
-            "self": {"agent_id": chapter_id, "did": chapter_did},
-            "chapters": chapters,
-            "total": len(chapters),
+            "self": {"agent_id": chapter_id, "did": server_did},
+            "chapters": servers,
+            "total": len(servers),
         }
 
     @app.get("/api/federation/{peer_id}/members")

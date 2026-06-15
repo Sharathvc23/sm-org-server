@@ -2,7 +2,7 @@
 
 The receipt hash chain proves *forward* tamper-evidence within one issuer; the
 checkpoint proves *membership across the whole log*: anyone holding a receipt,
-its inclusion proof, and the signed root verifies it offline — no chapter trust.
+its inclusion proof, and the signed root verifies it offline — no server trust.
 
 Prosecution-grade:
 - C-port:  the Merkle math is validated against independently-computed RFC 6962
@@ -29,7 +29,7 @@ from sm_server.store.sqlite import SqliteStore
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(store=SqliteStore(), chapter_id="test-chapter"))
+    return TestClient(create_app(store=SqliteStore(), chapter_id="test-server"))
 
 
 def _ingest(client: TestClient, n: int) -> list[dict]:
@@ -100,7 +100,7 @@ def test_checkpoint_commits_to_log_and_signature_verifies(client: TestClient) ->
     assert payload["tree_size"] == 5
     assert set(payload["receipt_ids"]) == {r["receipt_id"] for r in receipts}
 
-    # Signature verifies under the chapter's advertised DID over the JCS payload.
+    # Signature verifies under the server's advertised DID over the JCS payload.
     pub = signing.parse_did_key(cp["signer_did"])
     sig = base64.b64decode(cp["signature"])
     assert signing.verify(pub, sig, canonical_bytes(payload, include_signature=True))

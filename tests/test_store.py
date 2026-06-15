@@ -1,4 +1,4 @@
-"""SqliteStore — the default backend behind the ChapterStore seam."""
+"""SqliteStore — the default backend behind the ServerStore seam."""
 
 from __future__ import annotations
 

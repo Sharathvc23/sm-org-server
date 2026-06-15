@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render the chapter's live `receipts` A2UI surface to a standalone HTML figure.
+"""Render the server's live `receipts` A2UI surface to a standalone HTML figure.
 
-Not a mock: this spins up the chapter, emits real receipts (a member's via the
-ingest endpoint + the chapter's own attestation via feedback), fetches the
+Not a mock: this spins up the server, emits real receipts (a member's via the
+ingest endpoint + the server's own attestation via feedback), fetches the
 actual `GET /api/surfaces/receipts` A2UI envelope, and renders its components.
 The output is committed as docs/figures/receipts-surface.html.
 
@@ -34,7 +34,7 @@ def _seed_receipts(client: TestClient) -> None:
         action = build_action(category=cat, human_summary=summary)
         client.post("/api/receipts", json=issue_receipt(alice, principal_did=alice.did, action=action))
 
-    # A chapter-emitted attestation, via a signed feedback request.
+    # A server-emitted attestation, via a signed feedback request.
     priv = Ed25519PrivateKey.generate()
     pub = priv.public_key().public_bytes_raw()
     did, ts, body = derive_did_key(pub), str(int(time.time())), '{"kind":"intent_response_useful"}'
@@ -93,7 +93,7 @@ def _render(components: list[dict]) -> str:
 
 
 def main() -> None:
-    client = TestClient(create_app(store=SqliteStore(), chapter_id="demo-chapter"))
+    client = TestClient(create_app(store=SqliteStore(), chapter_id="demo-server"))
     _seed_receipts(client)
     envelope = client.get("/api/surfaces/receipts").json()
     html = _render(envelope["updateComponents"]["components"])

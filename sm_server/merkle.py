@@ -1,11 +1,11 @@
 """RFC 6962 Merkle tree + a signed checkpoint over the ARP Issuer Log.
 
 The per-issuer hash chain (ARP §6.4) gives *forward* tamper-evidence inside one
-issuer's receipts. This adds the *reverse* seam across the whole log: the chapter
+issuer's receipts. This adds the *reverse* seam across the whole log: the server
 signs a checkpoint anchoring an RFC 6962 Merkle tree over every receipt it holds,
 and any holder of a receipt + its inclusion proof + the signed root can verify
 membership offline — without the rest of the log, and without trusting the
-chapter's say-so.
+server's say-so.
 
 Pure functions over raw leaf bytes; domain-separated leaf/node hashes per
 RFC 6962 §2.1. The leaf is the JCS-canonical bytes of the full signed receipt,
@@ -103,7 +103,7 @@ def build_checkpoint(receipts: list[dict[str, Any]], *, identity: Identity) -> d
     """Sign an RFC 6962 Merkle checkpoint committing to ``receipts`` in order.
 
     The payload is signed over its JCS-canonical bytes by ``identity`` (the
-    chapter's own ARP key). ``canonical_bytes(payload, include_signature=True)``
+    server's own ARP key). ``canonical_bytes(payload, include_signature=True)``
     is exactly ``jcs.canonicalize(payload)`` here because the payload carries no
     ``signature`` field — so the signed bytes match the cross-runtime format.
     """

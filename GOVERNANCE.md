@@ -2,7 +2,7 @@
 
 ## Scope
 
-`sm-server` is the minimal conformant wire of a chapter server: registration, key rotation, signed feedback, the trust ledger, surfaces, federation discovery, and the well-known substrate. It is deliberately *not* an agent runtime, a database, or a product. Storage backends, origin policy, and agent behaviour live above this line, in your code.
+`sm-server` is the minimal conformant wire of a server: registration, key rotation, signed feedback, the trust ledger, surfaces, federation discovery, and the well-known substrate. It is deliberately *not* an agent runtime, a database, or a product. Storage backends, origin policy, and agent behaviour live above this line, in your code.
 
 ## Versioning
 
@@ -16,7 +16,7 @@ A build is conformant *iff* a conformance suite passes against a running instanc
 
 ## Contributions
 
-Issues and pull requests are welcome. A change that touches the wire must keep conformance green and update the badge. A change that touches storage or policy must keep the `ChapterStore` Protocol stable or version it explicitly. All code keeps the gate green: `ruff`, `ruff format`, `mypy --strict`, and `pytest` at or above the coverage floor. Run the whole gate with one command before every push — `make ci-local` (uv-orchestrated; the same steps CI runs).
+Issues and pull requests are welcome. A change that touches the wire must keep conformance green and update the badge. A change that touches storage or policy must keep the `ServerStore` Protocol stable or version it explicitly. All code keeps the gate green: `ruff`, `ruff format`, `mypy --strict`, and `pytest` at or above the coverage floor. Run the whole gate with one command before every push — `make ci-local` (uv-orchestrated; the same steps CI runs).
 
 ## Attribution
 

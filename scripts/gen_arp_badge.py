@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Generate sm-server's signed ARP conformance badge — mechanically.
 
-Conformance is a *run*, not a declaration: this drives the live chapter's
+Conformance is a *run*, not a declaration: this drives the live server's
 ingest surface with the canonical ARP receipt vector corpus and counts what it
-actually accepts/rejects, then signs the result with the chapter's runtime key
+actually accepts/rejects, then signs the result with the server's runtime key
 via sm-conformance's badge primitive (rung 1, self-signed).
 
     pip install 'sm-arp[conformance]'           # brings in sm-conformance
     ARP_REPO=~/sm-arp \
-    NANDA_RUNTIME_KEY=~/.config/nanda-runtime-keys/chapter.hex \
+    NANDA_RUNTIME_KEY=~/.config/nanda-runtime-keys/server.hex \
         python scripts/gen_arp_badge.py
 
 The ARP vector corpus + badge tool live in the sm-arp repo (they are not shipped
@@ -60,7 +60,7 @@ def run_corpus(client: TestClient) -> tuple[int, int, int]:
 
 def main() -> int:
     key_path = Path(
-        os.environ.get("NANDA_RUNTIME_KEY", str(Path.home() / ".config/nanda-runtime-keys/chapter.hex"))
+        os.environ.get("NANDA_RUNTIME_KEY", str(Path.home() / ".config/nanda-runtime-keys/server.hex"))
     ).expanduser()
     seed = binascii.unhexlify(key_path.read_text().strip())
 

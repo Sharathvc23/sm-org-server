@@ -2,7 +2,7 @@
 
 The umbrella conformance suite proves wire compliance against a live server;
 these tests pin the same behaviour fast and offline, including the happy paths
-the conformance suite can only reach with multi-chapter or seeded fixtures.
+the conformance suite can only reach with multi-server or seeded fixtures.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from sm_server import signing
 from sm_server.app import create_app
 from sm_server.store.sqlite import SqliteStore
 
-CHAPTER = "test-chapter"
+CHAPTER = "test-server"
 
 
 @pytest.fixture
@@ -187,8 +187,8 @@ def test_feedback_missing_headers_rejected(client: TestClient) -> None:
 
 
 def test_feedback_emits_a_chapter_signed_receipt(client: TestClient) -> None:
-    """The chapter is a first-class ARP issuer: recording feedback also signs a
-    receipt endorsing the member (issuer=chapter → counterparty=member)."""
+    """The server is a first-class ARP issuer: recording feedback also signs a
+    receipt endorsing the member (issuer=server → counterparty=member)."""
     from sm_arp import verify_receipt
 
     chapter_did = client.get("/.well-known/nanda-agent.json").json()["did"]

@@ -22,7 +22,7 @@ _RAW_PUB = serialization.PublicFormat.Raw
 
 
 def generate_chapter_identity() -> tuple[Ed25519PrivateKey, bytes, str]:
-    """Return (private_key, pubkey32, did_key) for the chapter's own identity."""
+    """Return (private_key, pubkey32, did_key) for the server's own identity."""
     priv = Ed25519PrivateKey.generate()
     pub32 = priv.public_key().public_bytes(_RAW, _RAW_PUB)
     return priv, pub32, derive_did_key(pub32)

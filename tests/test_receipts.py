@@ -1,6 +1,6 @@
 """ARP Issuer Log — ingest, verify, persist, and the live receipts surface.
 
-The chapter trusts the receipt *envelope*, not the transport: a receipt is
+The server trusts the receipt *envelope*, not the transport: a receipt is
 self-authenticating via its Ed25519 signature, so verification (owned by
 `sm_arp`) is the only gate. These tests issue real receipts with `sm_arp` and
 drive them through the HTTP surface.
@@ -22,7 +22,7 @@ from sm_server.store.sqlite import SqliteStore
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(store=SqliteStore(), chapter_id="test-chapter"))
+    return TestClient(create_app(store=SqliteStore(), chapter_id="test-server"))
 
 
 def _receipt(issuer: Identity | None = None, *, summary: str = "shared a record", **kw) -> dict:
@@ -88,7 +88,7 @@ def test_tampered_receipt_rejected_and_not_persisted(client: TestClient) -> None
 
 def test_broken_hash_chain_rejected(client: TestClient) -> None:
     issuer = Identity.generate()
-    # Declares a predecessor link the chapter has never seen → genesis-with-prev.
+    # Declares a predecessor link the server has never seen → genesis-with-prev.
     orphan = _receipt(issuer, previous_receipt_hash="sha256:" + "0" * 64)
     resp = client.post("/api/receipts", json=orphan)
     assert resp.json()["error"].startswith("hash_chain")
