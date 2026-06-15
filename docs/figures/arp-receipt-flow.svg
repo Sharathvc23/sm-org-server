@@ -19,7 +19,7 @@
 
   <!-- Member SDK -->
   <rect class="box" x="30" y="70" width="250" height="150" rx="10"/>
-  <text x="46" y="98" class="title">sm-member-sdk</text>
+  <text x="46" y="98" class="title">sm-org-agent</text>
   <text x="46" y="120" class="sub">MemberAgent.record(action)</text>
   <text x="46" y="140" class="sub">→ signs an ARP receipt</text>
   <text x="46" y="160" class="sub">→ hash-chains it (§6.4)</text>
@@ -28,7 +28,7 @@
 
   <!-- Chapter -->
   <rect class="box" x="640" y="70" width="250" height="150" rx="10"/>
-  <text x="656" y="98" class="title">sm-chapter</text>
+  <text x="656" y="98" class="title">sm-org-server</text>
   <text x="656" y="120" class="sub">POST /api/receipts</text>
   <text x="656" y="140" class="sub">verify → resolve prior → persist</text>
   <text x="656" y="160" class="sub">Issuer Log (§10.2), via ChapterStore</text>
