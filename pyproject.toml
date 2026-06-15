@@ -10,7 +10,17 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "stellarminds.ai" }]
-keywords = ["agents", "federation", "did", "conformance", "chapter"]
+keywords = ["agents", "federation", "did", "conformance", "chapter", "server"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Security :: Cryptography",
+]
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.27",
@@ -30,6 +40,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Sharathvc23/sm-server"
+Repository = "https://github.com/Sharathvc23/sm-server"
+Changelog = "https://github.com/Sharathvc23/sm-server/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sm_server"]
