@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sm-server"
+name = "sm-org-server"
 version = "0.1.0"
 description = "Minimal, backend-agnostic, conformance-passing chapter server for federated AI agents."
 readme = "README.md"
@@ -42,9 +42,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Sharathvc23/sm-server"
-Repository = "https://github.com/Sharathvc23/sm-server"
-Changelog = "https://github.com/Sharathvc23/sm-server/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Sharathvc23/sm-org-server"
+Repository = "https://github.com/Sharathvc23/sm-org-server"
+Changelog = "https://github.com/Sharathvc23/sm-org-server/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sm_server"]

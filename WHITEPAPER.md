@@ -1,8 +1,8 @@
-# sm-server: A Minimal Conformant Home Server for Federated AI Agents
+# sm-org-server: A Minimal Conformant Home Server for Federated AI Agents
 
 ## Abstract
 
-As autonomous agents proliferate, they need somewhere to *live* — a server that admits them, gives each a verifiable identity, tracks whether they can be trusted, renders their shared surfaces, and connects to peer servers so agents in one community can find and call agents in another. Today every such "agent platform" is a monolith: the interoperability wire, the database, and the agent's intelligence are fused into one stack you must adopt whole. `sm-server` unbundles them. It implements **only the conformant wire** of a *server* — the home server — in ~550 lines against a swappable storage interface. The brain and the business logic become your code, layered on top. The result is a runtime small enough to audit completely and mechanical enough to federate with any other conformant server, regardless of who wrote it.
+As autonomous agents proliferate, they need somewhere to *live* — a server that admits them, gives each a verifiable identity, tracks whether they can be trusted, renders their shared surfaces, and connects to peer servers so agents in one community can find and call agents in another. Today every such "agent platform" is a monolith: the interoperability wire, the database, and the agent's intelligence are fused into one stack you must adopt whole. `sm-org-server` unbundles them. It implements **only the conformant wire** of a *server* — the home server — in ~550 lines against a swappable storage interface. The brain and the business logic become your code, layered on top. The result is a runtime small enough to audit completely and mechanical enough to federate with any other conformant server, regardless of who wrote it.
 
 ## 1. Problem
 
@@ -12,12 +12,12 @@ This kills interoperability twice over. First, you cannot self-host a small serv
 
 ## 2. The Server Primitive
 
-`sm-server` is the floor, not the building. It draws a hard line between three layers that are usually fused:
+`sm-org-server` is the floor, not the building. It draws a hard line between three layers that are usually fused:
 
 ```
         product · policy · LLM · governance        ← your code, your moat
    ┌──────────────────────────────────────────┐
-   │                sm-server                 │    ← the conformant wire
+   │                sm-org-server                 │    ← the conformant wire
    │   register · rotate · feedback · trust    │
    │   surfaces · federation · well-known      │
    └────────────────────┬─────────────────────┘
@@ -37,7 +37,7 @@ A small surface is not a limitation here; it is the mechanism. You can read the 
 
 The protocol surface — canonical signing strings, did:key derivation, trust-event deltas, the A2UI envelope shape — never changes silently. But the *origin vocabulary* (which provenances a server admits), the storage backend, and the agent's behaviour are all deployment policy.
 
-**Consequence:** no runtime-specific name appears in the source. `sm-server` ships admitting only the neutral `sovereign` origin; a deployment declares the rest via `SERVER_ORIGINS`. The same binary is both vendor-neutral and drop-in for a managed install.
+**Consequence:** no runtime-specific name appears in the source. `sm-org-server` ships admitting only the neutral `sovereign` origin; a deployment declares the rest via `SERVER_ORIGINS`. The same binary is both vendor-neutral and drop-in for a managed install.
 
 ### 4.2 Identity is cryptographic and rotatable
 
@@ -71,17 +71,17 @@ Trust answers *can* this agent be relied on; it does not answer *what did it do*
 
 ## 5. Where This Fits
 
-`sm-server` is the *server* in a family of independent primitives:
+`sm-org-server` is the *server* in a family of independent primitives:
 
 - A conformance toolkit proves the server speaks the protocol.
 - A receipt protocol (ARP) gives agents — and the server itself — human-auditable, signed evidence of what they did.
 - A registry federates many servers and checks their badges at admission.
 
-`sm-server` consumes the receipt protocol directly (the `sm_arp` library backs its Issuer Log) and emits the discovery substrate and signed badges that let the toolkit and registry compose. It depends on no *registry* at runtime — it simply publishes what they attest against.
+`sm-org-server` consumes the receipt protocol directly (the `sm_arp` library backs its Issuer Log) and emits the discovery substrate and signed badges that let the toolkit and registry compose. It depends on no *registry* at runtime — it simply publishes what they attest against.
 
 ## 6. NANDA Alignment
 
-[Project NANDA](https://projectnanda.org) frames the open Internet of Agents around four pillars: **DNS** (discovery), **CA** (decentralized identity), **Orchestration** (routing), and **Attestation** (verifiable evidence). A server is where these pillars meet a real community: it serves discovery at `/.well-known`, issues and rotates the decentralized identities, routes between federated peers, and emits the trust evidence others attest against. `sm-server` is a reference of *exactly* the conformant slice of that — the part a peer can mechanically rely on — and nothing more.
+[Project NANDA](https://projectnanda.org) frames the open Internet of Agents around four pillars: **DNS** (discovery), **CA** (decentralized identity), **Orchestration** (routing), and **Attestation** (verifiable evidence). A server is where these pillars meet a real community: it serves discovery at `/.well-known`, issues and rotates the decentralized identities, routes between federated peers, and emits the trust evidence others attest against. `sm-org-server` is a reference of *exactly* the conformant slice of that — the part a peer can mechanically rely on — and nothing more.
 
 ## 7. Future Work
 

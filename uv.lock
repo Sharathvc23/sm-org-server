@@ -791,7 +791,7 @@ wheels = [
 ]
 
 [[package]]
-name = "sm-server"
+name = "sm-org-server"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

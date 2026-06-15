@@ -116,7 +116,7 @@ def create_app(
     store = store or SqliteStore()
     # `chapter_id` is the frozen wire field (the server's identifier on the wire); the
     # env var that sets it is the new `SERVER_ID` (legacy `CHAPTER_ID` still honored).
-    chapter_id = chapter_id or _env("SERVER_ID", "CHAPTER_ID", default="sm-server") or "sm-server"
+    chapter_id = chapter_id or _env("SERVER_ID", "CHAPTER_ID", default="sm-org-server") or "sm-org-server"
     _public_url = _env("SERVER_PUBLIC_URL", "CHAPTER_PUBLIC_URL", default="https://server.local") or ""
     base_url = _public_url.rstrip("/")
     valid_origins = (
@@ -151,7 +151,7 @@ def create_app(
     arp_badge_doc = _load_badge(
         "SERVER_ARP_BADGE_PATH", "CHAPTER_ARP_BADGE_PATH", ".nanda/arp-conformance.json"
     )
-    app = FastAPI(title="sm-server")
+    app = FastAPI(title="sm-org-server")
 
     def emit_server_receipt(
         principal_did: str,

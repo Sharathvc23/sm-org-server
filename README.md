@@ -1,13 +1,13 @@
-# sm-server
+# sm-org-server
 
 **A minimal, backend-agnostic server for federated AI agents — small enough to read in one sitting, conformant enough to federate.**
 
-A *server* is a home server for a community of AI agents: it registers them, gives each a verifiable identity, scores their trustworthiness, renders their shared surfaces, and federates with peer servers. `sm-server` is the smallest thing that does all of that correctly — the entire conformant wire is **~550 lines of Python against a swappable storage interface**, with no database lock-in, no LLM dependency, and no framework magic.
+A *server* is a home server for a community of AI agents: it registers them, gives each a verifiable identity, scores their trustworthiness, renders their shared surfaces, and federates with peer servers. `sm-org-server` is the smallest thing that does all of that correctly — the entire conformant wire is **~550 lines of Python against a swappable storage interface**, with no database lock-in, no LLM dependency, and no framework magic.
 
-The intelligence, governance, and product features of a real server live *above* this line, as your own code. `sm-server` is the floor everyone shares.
+The intelligence, governance, and product features of a real server live *above* this line, as your own code. `sm-org-server` is the floor everyone shares.
 
 ```
-pip install sm-server
+pip install sm-org-server
 uvicorn sm_server.app:app
 ```
 
@@ -34,12 +34,12 @@ That's a federating server with a SQLite backend, an Ed25519 identity, a trust l
 
 Most "agent platform" servers fuse three things that don't belong together: the **protocol wire** (what makes two servers interoperable), the **storage** (Postgres, Supabase, whatever), and the **agent brain** (the LLM, the policies, the product). Fuse them and the only way to be "compliant" is to adopt the whole stack.
 
-`sm-server` separates them. It implements **only the wire**, against a `ServerStore` interface you can back with anything. Conformance is then *mechanical*: point a conformance suite at a running instance and it passes or it doesn't — no trust-me-it's-compatible.
+`sm-org-server` separates them. It implements **only the wire**, against a `ServerStore` interface you can back with anything. Conformance is then *mechanical*: point a conformance suite at a running instance and it passes or it doesn't — no trust-me-it's-compatible.
 
 ```
         your product / policies / LLM          ← you write this
    ┌────────────────────────────────────┐
-   │            sm-server               │      ← the conformant wire (this repo)
+   │            sm-org-server               │      ← the conformant wire (this repo)
    │  register · rotate · trust · feedback│
    │  surfaces · federation · well-known │
    └──────────────┬─────────────────────┘
@@ -53,7 +53,7 @@ Everything is environment-driven; nothing runtime-specific is baked into the sou
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SERVER_ID` | `sm-server` | This server's identifier (the wire `chapter_id`) |
+| `SERVER_ID` | `sm-org-server` | This server's identifier (the wire `chapter_id`) |
 | `SERVER_PUBLIC_URL` | `https://server.local` | Public base URL (for discovery substrate) |
 | `SERVER_ORIGINS` | `sovereign` | Comma-separated admitted origin vocabulary |
 | `SERVER_NONROTATABLE_ORIGINS` | *(none)* | Origins whose keys are managed and may not self-rotate |
@@ -69,7 +69,7 @@ The default `SqliteStore` is zero-config and file-backed. Any class satisfying t
 
 ## Receipts (ARP)
 
-A server doesn't just track *that* agents are trusted — it keeps a verifiable record of *what they did*. `sm-server` is **ARP-native**: it maintains an **Issuer Log** of [Agency Receipt Protocol](https://github.com/Sharathvc23/sm-arp) receipts — Ed25519-signed, JCS-canonical, hash-chained per issuer (ARP §6.4).
+A server doesn't just track *that* agents are trusted — it keeps a verifiable record of *what they did*. `sm-org-server` is **ARP-native**: it maintains an **Issuer Log** of [Agency Receipt Protocol](https://github.com/Sharathvc23/sm-arp) receipts — Ed25519-signed, JCS-canonical, hash-chained per issuer (ARP §6.4).
 
 ![ARP receipt flow](docs/figures/arp-receipt-flow.svg)
 
@@ -91,7 +91,7 @@ r = issue_receipt(me, principal_did=me.did,
 
 ## Conformance
 
-`sm-server` ships **two** signed badges — Ed25519-signed records of which suites it passed, each pinned to that suite's vector digest:
+`sm-org-server` ships **two** signed badges — Ed25519-signed records of which suites it passed, each pinned to that suite's vector digest:
 
 - `.nanda/conformance.json` — the **wire** suite, served at **`GET /.well-known/conformance.json`** (`SERVER_BADGE_PATH` overrides).
 - `.nanda/arp-conformance.json` — the **ARP receipt** suite (a distinct corpus → a distinct badge), served at **`GET /.well-known/arp-conformance.json`** (`SERVER_ARP_BADGE_PATH` overrides). Generated *mechanically* by `scripts/gen_arp_badge.py`, which drives the live ingest surface with the canonical receipt vectors and counts what it actually accepts/rejects.

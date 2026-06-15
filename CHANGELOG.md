@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
-- **Server rename (Tier 4, brand only — wire frozen).** The package, prose, public symbols, and config now use *server* vocabulary: `ChapterStore` → `ServerStore`, env vars `CHAPTER_*` → `SERVER_*` (legacy `CHAPTER_*` still read as aliases — no deployment breaks), app title `chapter-core` → `sm-server`. The **wire is unchanged**: `chapter_id`, the `ROTATE:{chapter_id}:…` canonical signing string, the `"chapter"`/`"chapters"` response keys, routes, and AgentFacts fields are all frozen by the protocol. Conformance stays green.
+- **Server rename (Tier 4, brand only — wire frozen).** The package, prose, public symbols, and config now use *server* vocabulary: `ChapterStore` → `ServerStore`, env vars `CHAPTER_*` → `SERVER_*` (legacy `CHAPTER_*` still read as aliases — no deployment breaks), app title `chapter-core` → `sm-org-server`. The **wire is unchanged**: `chapter_id`, the `ROTATE:{chapter_id}:…` canonical signing string, the `"chapter"`/`"chapters"` response keys, routes, and AgentFacts fields are all frozen by the protocol. Conformance stays green.
 
 ### Added
 - **ARP Issuer Log.** The server is now ARP-native — it keeps a verifiable log of [Agency Receipt Protocol](https://github.com/Sharathvc23/sm-arp) receipts via the `sm_arp` consumable library:

@@ -68,7 +68,7 @@ def _render(components: list[dict]) -> str:
             )
     body = "\n      ".join(rows)
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Issuer Log — sm-server</title>
+<html lang="en"><head><meta charset="utf-8"><title>Issuer Log — sm-org-server</title>
 <style>
   body{{margin:0;background:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a}}
   .card{{max-width:680px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;

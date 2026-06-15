@@ -1,4 +1,4 @@
-# Publish sm-server to PyPI on a version tag, via PyPI Trusted Publishing (OIDC).
+# Publish sm-org-server to PyPI on a version tag, via PyPI Trusted Publishing (OIDC).
 #
 # No API token anywhere: PyPI is told (once, in its web UI) to trust THIS repo +
 # THIS workflow file, and the `id-token: write` permission below lets the job

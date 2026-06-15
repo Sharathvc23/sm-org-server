@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate sm-server's signed ARP conformance badge — mechanically.
+"""Generate sm-org-server's signed ARP conformance badge — mechanically.
 
 Conformance is a *run*, not a declaration: this drives the live server's
 ingest surface with the canonical ARP receipt vector corpus and counts what it
@@ -69,7 +69,7 @@ def main() -> int:
     print(f"ARP corpus: {passed} passed, {failed} failed, {skipped} skipped")
 
     badge = build_arp_badge(
-        "sm-server",
+        "sm-org-server",
         passed=passed,
         failed=failed,
         skipped=skipped,

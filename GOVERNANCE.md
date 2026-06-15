@@ -2,7 +2,7 @@
 
 ## Scope
 
-`sm-server` is the minimal conformant wire of a server: registration, key rotation, signed feedback, the trust ledger, surfaces, federation discovery, and the well-known substrate. It is deliberately *not* an agent runtime, a database, or a product. Storage backends, origin policy, and agent behaviour live above this line, in your code.
+`sm-org-server` is the minimal conformant wire of a server: registration, key rotation, signed feedback, the trust ledger, surfaces, federation discovery, and the well-known substrate. It is deliberately *not* an agent runtime, a database, or a product. Storage backends, origin policy, and agent behaviour live above this line, in your code.
 
 ## Versioning
 
