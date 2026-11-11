@@ -19,3 +19,69 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # Same gate as `make ci-local`, so green locally == green in CI.
       - run: make ci-local
+
+  # sm-org-server is a NANDA chapter iff the umbrella's server conformance suite
+  # passes against a running instance. The suite lives in the private umbrella
+  # (Sharathvc23/Nanda_Chapter_Protocol); this job needs a read token for it
+  # (UMBRELLA_TOKEN) and reports a notice — not a failure — when none is set,
+  # e.g. on forks. Same pattern as nanda-chapter-kit's CI.
+  conformance:
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    env:
+      SERVER_PORT: "7901"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is the umbrella token available?
+        id: gate
+        env:
+          HAVE_TOKEN: ${{ secrets.UMBRELLA_TOKEN != '' }}
+        run: |
+          echo "run=$HAVE_TOKEN" >> "$GITHUB_OUTPUT"
+          if [ "$HAVE_TOKEN" != "true" ]; then
+            echo "::notice title=conformance skipped::Set the UMBRELLA_TOKEN secret (read access to Sharathvc23/Nanda_Chapter_Protocol) to run the server conformance suite in CI."
+          fi
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Sharathvc23/Nanda_Chapter_Protocol
+          token: ${{ secrets.UMBRELLA_TOKEN }}
+          path: umbrella
+          sparse-checkout: |
+            conformance
+            vectors
+            schema
+            pyproject.toml
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - if: steps.gate.outputs.run == 'true'
+        run: pip install -e ".[dev]" && pip install -r umbrella/conformance/requirements.txt
+      - if: steps.gate.outputs.run == 'true'
+        name: Boot the server
+        env:
+          SERVER_ID: TEST-sm-org-server-ci
+          SERVER_PUBLIC_URL: http://localhost:7901
+          SERVER_ORIGINS: sovereign,openclaw,managed
+          SERVER_DB_PATH: ${{ runner.temp }}/sm-server-ci.sqlite
+        run: |
+          nohup python -m uvicorn sm_server.app:app --port "$SERVER_PORT" > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS "http://localhost:$SERVER_PORT/health" >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS "http://localhost:$SERVER_PORT/health"
+      - if: steps.gate.outputs.run == 'true'
+        name: Server conformance
+        working-directory: umbrella
+        # The ephemeral server has no durable backend across runs, so the tests
+        # the umbrella marks `requires_persistence` are deselected — the same
+        # selection the umbrella's own PR gate makes against its ephemeral chapter.
+        run: >
+          python -m pytest conformance/server/
+          --chapter-url="http://localhost:$SERVER_PORT"
+          --http-timeout=30
+          -m "not requires_persistence"
+          -q
+      - if: always() && steps.gate.outputs.run == 'true'
+        run: tail -n 50 server.log || true
