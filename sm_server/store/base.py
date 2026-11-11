@@ -21,17 +21,48 @@ class Member:
     did_key: str
 
 
+class ReceiptConflict(Exception):
+    """An append would rewrite the Issuer Log.
+
+    ``reason`` is one of:
+
+    - ``receipt_rewrite`` — a receipt with this ``(issuer_did, receipt_id)`` is
+      already on the log with *different* canonical bytes;
+    - ``chain_fork`` — the issuer already has a successor to the receipt this
+      one names as ``previous_receipt_hash`` (ARP §6.4: one child per link).
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class ServerStore(Protocol):
     """Persistence the conformant protocol surface requires."""
 
     def get_member(self, agent_id: str) -> Member | None: ...
 
-    def put_member(self, member: Member) -> None: ...
+    def add_member(self, member: Member) -> bool:
+        """Insert ``member`` iff no row exists for its ``agent_id``, atomically.
+
+        Return True when inserted, False when the id was already taken. A
+        member's key of record is never overwritten by this call — that is the
+        registration-hijack the audit closed; rotation is the only key change.
+        """
+        ...
+
+    def delete_member(self, agent_id: str) -> bool:
+        """Remove the member. Return True if a row was deleted."""
+        ...
 
     def rotate_key(self, agent_id: str, new_public_key: str, new_did_key: str) -> None: ...
 
     def consume_nonce(self, scope: str, nonce: str) -> bool:
-        """Record (scope, nonce). Return True if fresh, False if already seen (replay)."""
+        """Record (scope, nonce). Return True if fresh, False if already seen (replay).
+
+        Entries are retained for at least 24 h (the replay window is ±300 s,
+        the feedback idempotency key is a UTC day) and may be pruned after.
+        """
         ...
 
     def member_count(self) -> int: ...
@@ -59,8 +90,11 @@ class ServerStore(Protocol):
     def append_receipt(self, receipt: dict[str, object]) -> str:
         """Persist a verified receipt; return the chain link it produces.
 
-        Idempotent on (issuer_did, receipt_id) — re-appending replaces rather
-        than duplicating (the spec's replay floor).
+        Append-only. Re-appending a byte-identical receipt returns the
+        existing link (the spec's replay floor); a receipt that would rewrite
+        an existing ``(issuer_did, receipt_id)`` or attach a second child to
+        the same ``(issuer_did, previous_receipt_hash)`` raises
+        :class:`ReceiptConflict` and writes nothing.
         """
         ...
 
@@ -72,6 +106,11 @@ class ServerStore(Protocol):
         by issuer because the hash chain is per-issuer (ARP §6.4)."""
         ...
 
+    def last_receipt_for_issuer(self, issuer_did: str) -> dict[str, object] | None:
+        """The issuer's most recent receipt (``issued_at`` DESC, insertion order
+        DESC as the tiebreak) — the link a new receipt of theirs chains to."""
+        ...
+
     def list_receipts(self, limit: int = 100) -> list[dict[str, object]]: ...
 
     def list_receipts_for_principal(
@@ -79,3 +118,7 @@ class ServerStore(Protocol):
     ) -> list[dict[str, object]]: ...
 
     def receipt_count(self) -> int: ...
+
+    def close(self) -> None:
+        """Release the backend connection. The store is unusable afterwards."""
+        ...

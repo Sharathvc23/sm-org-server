@@ -29,7 +29,7 @@ from sm_server.store.sqlite import SqliteStore
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(store=SqliteStore(), chapter_id="test-server"))
+    return TestClient(create_app(store=SqliteStore(":memory:"), chapter_id="test-server"))
 
 
 def _ingest(client: TestClient, n: int) -> list[dict]:

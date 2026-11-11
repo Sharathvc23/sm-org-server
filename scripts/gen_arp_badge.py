@@ -64,7 +64,7 @@ def main() -> int:
     ).expanduser()
     seed = binascii.unhexlify(key_path.read_text().strip())
 
-    client = TestClient(create_app(store=SqliteStore()))
+    client = TestClient(create_app(store=SqliteStore(":memory:")))
     passed, failed, skipped = run_corpus(client)
     print(f"ARP corpus: {passed} passed, {failed} failed, {skipped} skipped")
 

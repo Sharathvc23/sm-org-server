@@ -22,7 +22,7 @@ from sm_server.store.sqlite import SqliteStore
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(store=SqliteStore(), chapter_id="test-server"))
+    return TestClient(create_app(store=SqliteStore(":memory:"), chapter_id="test-server"))
 
 
 def _receipt(issuer: Identity | None = None, *, summary: str = "shared a record", **kw) -> dict:
@@ -145,3 +145,37 @@ def test_receipts_surface_lists_accepted(client: TestClient) -> None:
     env = client.get("/api/surfaces/receipts").json()
     blob = " ".join(str(c.get("text", "")) for c in env["updateComponents"]["components"])
     assert "surfaced action" in blob and "data_shared" in blob
+
+
+# ── APPEND-ONLY (audit 2026-11 #3) ─────────────────────────────────
+
+
+def test_rewrite_of_an_existing_receipt_id_is_409(client: TestClient) -> None:
+    """The log used to be INSERT OR REPLACE: a valid re-signed receipt with the
+    same id silently replaced history. Now it is refused and nothing changes."""
+    me = Identity.generate()
+    original = _receipt(me, summary="v1")
+    assert client.post("/api/receipts", json=original).json()["accepted"] is True
+    rewritten = _receipt(
+        me, summary="REWRITTEN", receipt_id=original["receipt_id"], issued_at=original["issued_at"]
+    )
+    resp = client.post("/api/receipts", json=rewritten)
+    assert resp.status_code == 409
+    assert resp.json()["error"] == "receipt_rewrite"
+    stored = client.get(f"/api/receipts/{original['receipt_id']}").json()
+    assert stored["action"]["human_summary"] == "v1"
+    assert client.get("/api/receipts/recent").json()["total"] == 1
+
+
+def test_second_child_of_the_same_link_is_409_chain_fork(client: TestClient) -> None:
+    issuer = Identity.generate()
+    genesis = _receipt(issuer, summary="genesis")
+    client.post("/api/receipts", json=genesis)
+    child1 = _receipt(issuer, summary="child 1", previous_receipt_hash=chain_link(genesis))
+    assert client.post("/api/receipts", json=child1).json()["accepted"] is True
+    child2 = _receipt(issuer, summary="child 2", previous_receipt_hash=chain_link(genesis))
+    resp = client.post("/api/receipts", json=child2)
+    assert resp.status_code == 409 and resp.json()["error"] == "chain_fork"
+    assert client.get("/api/receipts/recent").json()["total"] == 2
+    # The honest child is still the one on the log, and re-posting it is still idempotent.
+    assert client.post("/api/receipts", json=child1).json()["chain_link"] == chain_link(child1)
