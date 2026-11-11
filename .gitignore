@@ -7,6 +7,10 @@ dist/
 .venv/
 venv/
 
+# Default runtime database (SERVER_DB_PATH)
+sm-server.sqlite
+sm-server.sqlite-*
+
 # Tooling caches
 .pytest_cache/
 .mypy_cache/

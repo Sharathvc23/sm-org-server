@@ -8,27 +8,48 @@ agent's intelligence and governance live above this, as product or plugins.
 from __future__ import annotations
 
 import base64
+import binascii
+import datetime as dt
 import json
 import os
+import threading
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sm_arp import Identity as ArpIdentity
-from sm_arp import build_action, issue_receipt, verify_receipt
+from sm_arp import build_action, chain_link, issue_receipt, verify_receipt
 
 from sm_server import merkle, signing, trust
-from sm_server.store.base import Member, ServerStore
+from sm_server.auth import (
+    TOFU_ORIGIN,
+    SignedRequestError,
+    decode_public_key,
+    verify_signed_request,
+)
+from sm_server.store.base import Member, ReceiptConflict, ServerStore
 from sm_server.store.sqlite import SqliteStore
 
 ROTATION_WINDOW_S = 300
-SIGNED_REQUEST_WINDOW_S = 300
 
 # Origin vocabulary is policy, not protocol: the core ships neutral and a deployment
 # declares which origins it admits (and which may not self-rotate keys, e.g. managed
 # install-time identities) via config. No runtime-specific name is baked into source.
-DEFAULT_ORIGINS = ("sovereign",)
+DEFAULT_ORIGINS = (TOFU_ORIGIN,)
+
+# The one trust event a member can earn through /api/feedback, and the only one a
+# client can cause at all. Everything else in trust.EVENT_DELTAS is server-set.
+FEEDBACK_EVENT = "intent_response_useful"
+
+PROTOCOL_VERSIONS = ["0.2", "0.3"]
+PREFERRED_PROTOCOL_VERSION = "0.3"
+# Surfaces are emitted as v0.10 envelopes (`_surface` below); v0.9 is the
+# previous major a renderer may still negotiate. Advertise what we emit.
+A2UI_VERSIONS = ["0.9", "0.10"]
+PREFERRED_A2UI_VERSION = "0.10"
 
 
 def _env(*names: str, default: str | None = None) -> str | None:
@@ -59,7 +80,7 @@ def _surface(page_id: str, *components: dict[str, object]) -> dict[str, object]:
             "root": components[0]["id"] if components else "root",
             "components": list(components),
         },
-        "version": "0.10",
+        "version": PREFERRED_A2UI_VERSION,
     }
 
 
@@ -107,12 +128,54 @@ def _ordered_issuer_log(store: ServerStore) -> list[dict[str, object]]:
     return sorted(receipts, key=lambda r: (str(r.get("issued_at", "")), str(r.get("receipt_id", ""))))
 
 
+async def _json_object(req: Request) -> dict[str, object] | JSONResponse:
+    """The request body as a JSON object, or the 400 to send back instead."""
+    try:
+        body = await req.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse({"error": "body is not valid JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+    return body
+
+
+def _server_identity() -> ArpIdentity:
+    """The server's own ARP signing identity.
+
+    Stable across restarts when ``SERVER_SEED`` (base64 of a 32-byte Ed25519
+    seed) is set; ephemeral otherwise. A production deployment (``SERVER_ENV=
+    production``) MUST set it — an ephemeral issuer makes every receipt and
+    checkpoint the server signed unverifiable after the next restart.
+    """
+    seed_b64 = _env("SERVER_SEED", "CHAPTER_SEED")
+    env = (_env("SERVER_ENV", "CHAPTER_ENV", default="") or "").strip().lower()
+    if not seed_b64:
+        if env == "production":
+            raise RuntimeError(
+                "SERVER_SEED is not set but SERVER_ENV=production. The server's ARP issuer "
+                "identity would be regenerated on every restart, orphaning every receipt and "
+                "checkpoint it has signed. Set SERVER_SEED to the standard base64 of a 32-byte "
+                "Ed25519 seed, e.g. "
+                "`python -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())'`."
+            )
+        return ArpIdentity.generate()
+    try:
+        seed = base64.b64decode(seed_b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RuntimeError("SERVER_SEED is not standard base64") from exc
+    if len(seed) != 32:
+        raise RuntimeError(f"SERVER_SEED must decode to 32 bytes, got {len(seed)}")
+    identity: ArpIdentity = ArpIdentity.from_seed(seed)
+    return identity
+
+
 def create_app(
     store: ServerStore | None = None,
     chapter_id: str | None = None,
     origins: set[str] | None = None,
     nonrotatable_origins: set[str] | None = None,
 ) -> FastAPI:
+    owns_store = store is None
     store = store or SqliteStore()
     # `chapter_id` is the frozen wire field (the server's identifier on the wire); the
     # env var that sets it is the new `SERVER_ID` (legacy `CHAPTER_ID` still honored).
@@ -129,11 +192,12 @@ def create_app(
         if nonrotatable_origins is not None
         else _origins_from_env("SERVER_NONROTATABLE_ORIGINS", "CHAPTER_NONROTATABLE_ORIGINS", ())
     )
-    # The server's own ARP signing identity — it issues receipts for server
-    # actions, not just stores members'. Stable across restarts when SERVER_SEED
-    # (base64 of a 32-byte Ed25519 seed) is set; ephemeral otherwise.
-    _seed = _env("SERVER_SEED", "CHAPTER_SEED")
-    server_identity = ArpIdentity.from_seed(base64.b64decode(_seed)) if _seed else ArpIdentity.generate()
+    # TOFU (spec §3.1) records a first-contact signer as a self-custodied member.
+    # A deployment that does not admit that origin gets no TOFU: an unknown
+    # signer is `no_stored_key`, and registration is the only way in.
+    tofu_allowed = TOFU_ORIGIN in valid_origins
+
+    server_identity = _server_identity()
     server_did = server_identity.did
 
     # Signed conformance badges, served publicly (the canonical URLs across all
@@ -151,7 +215,24 @@ def create_app(
     arp_badge_doc = _load_badge(
         "SERVER_ARP_BADGE_PATH", "CHAPTER_ARP_BADGE_PATH", ".nanda/arp-conformance.json"
     )
-    app = FastAPI(title="sm-org-server")
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        if owns_store:
+            store.close()
+
+    app = FastAPI(title="sm-org-server", lifespan=lifespan)
+
+    @app.exception_handler(SignedRequestError)
+    async def _signed_request_error(_req: Request, exc: SignedRequestError) -> JSONResponse:
+        # spec/0.3/signing.md step 5: 401 with the closed-set reason. `detail`
+        # mirrors `error` because v0.2 clients read the FastAPI-style key.
+        return JSONResponse({"error": exc.reason, "detail": exc.reason}, status_code=401)
+
+    # The server's own chain: a receipt links to the server's previous one, and
+    # two server actions must not race into a fork, so emission is serialised.
+    emit_lock = threading.Lock()
 
     def emit_server_receipt(
         principal_did: str,
@@ -165,8 +246,8 @@ def create_app(
 
         The server is a first-class ARP issuer: actions it takes (attesting an
         interaction, endorsing a member) produce signed receipts the same way a
-        member's do. The edge (issuer=server → counterparty) is what the
-        reputation layer reads, so this is how a server's endorsement counts.
+        member's do, hash-chained to its previous receipt (ARP §6.4) so the
+        server's own log is as tamper-evident as anyone else's.
         """
         action = build_action(
             category=category,
@@ -174,11 +255,26 @@ def create_app(
             counterparty_did=counterparty_did,
             counterparty_label=counterparty_label,
         )
-        receipt: dict[str, object] = issue_receipt(
-            server_identity, principal_did=principal_did, action=action
-        )
-        store.append_receipt(receipt)
+        with emit_lock:
+            last = store.last_receipt_for_issuer(server_did)
+            receipt: dict[str, object] = issue_receipt(
+                server_identity,
+                principal_did=principal_did,
+                action=action,
+                previous_receipt_hash=chain_link(last) if last is not None else None,
+            )
+            store.append_receipt(receipt)
         return receipt
+
+    def directory_envelope(members: list[Member]) -> dict[str, object]:
+        return {
+            "chapter": chapter_id,
+            "members": [
+                {"agent_id": m.agent_id, "name": m.name, "origin": m.origin, "did_key": m.did_key}
+                for m in members
+            ],
+            "total": len(members),
+        }
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -188,45 +284,64 @@ def create_app(
     def version() -> dict[str, object]:
         return {
             "chapter_id": chapter_id,
-            "protocol_versions": ["0.2", "0.3"],
-            "preferred_version": "0.3",
-            "a2ui_versions": ["0.9"],
-            "preferred_a2ui_version": "0.9",
+            "protocol_versions": list(PROTOCOL_VERSIONS),
+            "preferred_version": PREFERRED_PROTOCOL_VERSION,
+            "a2ui_versions": list(A2UI_VERSIONS),
+            "preferred_a2ui_version": PREFERRED_A2UI_VERSION,
         }
 
     @app.post("/api/members")
     async def register(req: Request) -> JSONResponse:
-        body = await req.json()
+        body = await _json_object(req)
+        if isinstance(body, JSONResponse):
+            return body
         agent_id, name = body.get("agent_id"), body.get("name")
-        if not agent_id or not name:
+        if not (isinstance(agent_id, str) and agent_id and isinstance(name, str) and name):
             return JSONResponse({"error": "agent_id and name required"}, status_code=400)
         origin = body.get("origin")
-        if origin not in valid_origins:
+        if not isinstance(origin, str) or origin not in valid_origins:
             return JSONResponse(
                 {"error": f"invalid origin: must be one of {sorted(valid_origins)}"},
                 status_code=200,
             )
+        public_key = body.get("public_key")
+        raw_key = decode_public_key(public_key) if isinstance(public_key, str) else None
+        if raw_key is None:
+            return JSONResponse(
+                {"error": "public_key required: standard base64 of a 32-byte Ed25519 public key"},
+                status_code=400,
+            )
+        # Store the canonical encoding and derive the did:key ourselves — a client
+        # does not get to assert what its key decodes to.
+        public_key_b64 = base64.b64encode(raw_key).decode()
+        did_key = signing.derive_did_key(raw_key)
         existing = store.get_member(agent_id)
         if existing is not None and existing.origin != origin:
             return JSONResponse(
                 {"error": "origin mismatch", "existing_origin": existing.origin}, status_code=200
             )
-        public_key = body.get("public_key", "")
-        try:
-            did_key = signing.derive_did_key(base64.b64decode(public_key)) if public_key else ""
-        except Exception:
-            did_key = ""
-        store.put_member(Member(agent_id, name, origin, public_key, did_key))
+        if existing is None and store.add_member(Member(agent_id, name, origin, public_key_b64, did_key)):
+            return JSONResponse(
+                {"agent_id": agent_id, "registered": True, "chapter": chapter_id, "origin": origin}
+            )
+        # Taken (before this request, or by one that raced it). The id belongs to
+        # whoever holds the key of record; the same key is an idempotent re-register,
+        # any other key is an attempted takeover. Rotation is the only key change.
+        existing = existing or store.get_member(agent_id)
+        if existing is None or decode_public_key(existing.public_key) != raw_key:
+            return JSONResponse({"error": "key_mismatch", "detail": "key_mismatch"}, status_code=401)
         return JSONResponse(
-            {"agent_id": agent_id, "registered": True, "chapter": chapter_id, "origin": origin}
+            {"agent_id": agent_id, "registered": True, "chapter": chapter_id, "origin": existing.origin}
         )
 
     @app.post("/api/members/rotate")
     async def rotate(req: Request) -> JSONResponse:
-        a = await req.json()
+        a = await _json_object(req)
+        if isinstance(a, JSONResponse):
+            return a
         agent_id = a.get("agent_id")
-        member = store.get_member(agent_id)
-        if member is None:
+        member = store.get_member(agent_id) if isinstance(agent_id, str) else None
+        if member is None or not isinstance(agent_id, str):
             return JSONResponse({"error": "unknown agent — cannot rotate an unregistered key"})
         # §4.2 ordered checks; rejections return {"error": ...} with HTTP 200.
         if member.origin in nonrotatable:
@@ -237,99 +352,136 @@ def create_app(
             return JSONResponse({"error": f"chapter_id mismatch (attestation is for {a.get('chapter_id')})"})
         ts = a.get("timestamp")
         try:
-            if abs(int(time.time()) - int(ts)) > ROTATION_WINDOW_S:
+            if not isinstance(ts, int | str) or abs(int(time.time()) - int(ts)) > ROTATION_WINDOW_S:
                 return JSONResponse({"error": f"timestamp out of window (max {ROTATION_WINDOW_S}s)"})
-        except (TypeError, ValueError):
+        except ValueError:
             return JSONResponse({"error": f"timestamp out of window (max {ROTATION_WINDOW_S}s)"})
-        new_pk_b64 = a.get("new_public_key_b64", "")
-        if new_pk_b64 == member.public_key:
-            return JSONResponse({"error": "new public key must differ from old"})
-        try:
-            new_raw = base64.b64decode(new_pk_b64)
-        except Exception:
-            new_raw = b""
-        if len(new_raw) != 32:
-            return JSONResponse({"error": f"new pubkey wrong length: {len(new_raw)} (Ed25519 needs 32)"})
-        nonce = a.get("nonce", "")
-        canonical = f"ROTATE:{a.get('chapter_id')}:{agent_id}:{new_pk_b64}:{ts}:{nonce}"
-        try:
-            ok = signing.verify(
-                base64.b64decode(member.public_key),
-                base64.b64decode(a.get("signature", "")),
-                canonical.encode(),
+        new_pk_b64 = a.get("new_public_key_b64")
+        new_raw = decode_public_key(new_pk_b64) if isinstance(new_pk_b64, str) else None
+        if new_raw is None:
+            return JSONResponse(
+                {"error": "new pubkey wrong length (Ed25519 needs 32 bytes, standard base64)"}
             )
-        except Exception:
-            ok = False
-        if not ok:
+        if new_raw == decode_public_key(member.public_key):
+            return JSONResponse({"error": "new public key must differ from old"})
+        nonce = a.get("nonce")
+        if not isinstance(nonce, str) or not nonce:
+            return JSONResponse({"error": "nonce required"})
+        signature = a.get("signature")
+        old_raw = decode_public_key(member.public_key)
+        canonical = f"ROTATE:{chapter_id}:{agent_id}:{new_pk_b64}:{ts}:{nonce}"
+        try:
+            sig = base64.b64decode(signature, validate=True) if isinstance(signature, str) else b""
+        except (binascii.Error, ValueError):
+            sig = b""
+        if old_raw is None or not signing.verify(old_raw, sig, canonical.encode()):
             return JSONResponse({"error": "invalid signature (old key did not sign this attestation)"})
-        if not store.consume_nonce(chapter_id, nonce):
+        # Scoped per agent: one member cannot pre-burn another's nonce. Consumed
+        # only after the old key has proven it signed this attestation.
+        if not store.consume_nonce(f"rotate:{agent_id}", nonce):
             return JSONResponse({"error": "nonce replay"})
-        new_did = a.get("new_did_key") or signing.derive_did_key(new_raw)
-        store.rotate_key(agent_id, new_pk_b64, new_did)
-        return JSONResponse({"agent_id": agent_id, "rotated": True, "new_public_key_b64": new_pk_b64})
+        # The did:key is derived from the key, never taken from the client.
+        new_did = signing.derive_did_key(new_raw)
+        store.rotate_key(agent_id, base64.b64encode(new_raw).decode(), new_did)
+        return JSONResponse(
+            {"agent_id": agent_id, "rotated": True, "new_public_key_b64": new_pk_b64, "new_did_key": new_did}
+        )
+
+    async def directory(req: Request, limit: int) -> JSONResponse:
+        # §4.12: the directory is for members, not for anonymous bulk enumeration.
+        # A first-contact signer MAY bootstrap here (TOFU) where the deployment allows it.
+        verify_signed_request(req, await req.body(), store, tofu=tofu_allowed)
+        return JSONResponse(directory_envelope(store.list_members(limit)))
 
     @app.get("/api/members")
-    def list_members(limit: int = 50) -> dict[str, object]:
-        members = store.list_members(limit)
-        return {
-            "members": [
-                {"agent_id": m.agent_id, "name": m.name, "origin": m.origin, "did_key": m.did_key}
-                for m in members
-            ],
-            "total": store.member_count(),
-        }
+    async def list_members(req: Request, limit: int = 50) -> JSONResponse:
+        return await directory(req, limit)
+
+    @app.get("/api/members/", include_in_schema=False)
+    async def list_members_slash(req: Request, limit: int = 50) -> JSONResponse:
+        # Explicit, so the trailing-slash form is gated too instead of 307-ing.
+        return await directory(req, limit)
+
+    @app.get("/api/member/{agent_id}/profile")
+    def member_profile(agent_id: str) -> JSONResponse:
+        # §4.12 exact-match lookup stays open: a pasted profile link renders without an account.
+        m = store.get_member(agent_id)
+        if m is None:
+            raise HTTPException(status_code=404, detail="unknown agent")
+        return JSONResponse(
+            {
+                "agent_id": m.agent_id,
+                "name": m.name,
+                "origin": m.origin,
+                "did_key": m.did_key,
+                "chapter": chapter_id,
+            }
+        )
+
+    @app.delete("/api/members/{agent_id}")
+    async def delete_member(agent_id: str, req: Request) -> JSONResponse:
+        """A member removes its own membership — self-signed, no TOFU (nothing to bootstrap)."""
+        raw = await req.body()
+        if store.get_member(agent_id) is None:
+            raise HTTPException(status_code=404, detail="unknown agent")
+        signer = verify_signed_request(req, raw, store, tofu=False)
+        if signer.agent_id != agent_id:
+            raise HTTPException(status_code=403, detail="a member may only delete itself")
+        store.delete_member(agent_id)
+        return JSONResponse({"agent_id": agent_id, "deleted": True})
 
     @app.post("/api/feedback")
     async def feedback(req: Request) -> JSONResponse:
-        # Signed-request verification (spec/0.2 §3.1). The body is signed verbatim,
-        # so we read the raw bytes — re-serialising would change the canonical string.
+        # The body is signed verbatim, so verify the raw bytes — re-serialising
+        # would change the canonical string.
         raw = await req.body()
-        h = req.headers
-        agent_id = h.get("x-agent-id")
-        did_key_hdr = h.get("x-agent-did-key")
-        ts = h.get("x-agent-timestamp")
-        sig_b64 = h.get("x-agent-signature")
-        if not (agent_id and did_key_hdr and ts and sig_b64):
-            raise HTTPException(status_code=401, detail="missing v0.2 signed-request headers")
-        try:
-            if abs(int(time.time()) - int(ts)) > SIGNED_REQUEST_WINDOW_S:
-                raise HTTPException(status_code=401, detail="timestamp out of window")
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=401, detail="malformed timestamp") from None
-        try:
-            claimed_pub = signing.parse_did_key(did_key_hdr)
-            sig = base64.b64decode(sig_b64)
-        except Exception:
-            raise HTTPException(status_code=401, detail="malformed did-key or signature") from None
-        canonical = f"{raw.decode('utf-8', 'strict')}:{agent_id}:{ts}".encode()
+        signer = verify_signed_request(req, raw, store, tofu=tofu_allowed)
+        caller = signer.agent_id
 
-        member = store.get_member(agent_id)
-        if member is not None:
-            # Registered: the presented key MUST be the one on file (TOFU idempotence).
-            if claimed_pub != base64.b64decode(member.public_key):
-                raise HTTPException(status_code=401, detail="key_mismatch")
-            if not signing.verify(claimed_pub, sig, canonical):
-                raise HTTPException(status_code=401, detail="invalid signature")
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except ValueError:
+            parsed = {}
+        subject = parsed.get("agent_id") if isinstance(parsed, dict) else None
+        subject = subject if isinstance(subject, str) and subject else None
+
+        # Trust is something another member says about you. The caller names a
+        # subject; the subject must be a registered member other than the caller;
+        # and one voucher moves one subject at most once per UTC day. Anything
+        # else is still a recorded interaction — it just mints nothing.
+        credited = False
+        subject_member = store.get_member(subject) if subject is not None and subject != caller else None
+        if subject is not None and subject_member is not None:
+            today = dt.datetime.now(dt.UTC).date().isoformat()
+            if store.consume_nonce(f"vouch:{caller}:{subject}", today):
+                store.record_trust_event(subject, FEEDBACK_EVENT, trust.EVENT_DELTAS[FEEDBACK_EVENT])
+                credited = True
+
+        if credited and subject_member is not None:
+            receipt = emit_server_receipt(
+                server_did,
+                category="attestation_issued",
+                human_summary=f"Recorded {caller}'s positive feedback on {subject}"[:280],
+                counterparty_did=subject_member.did_key,
+                counterparty_label=subject,
+            )
         else:
-            # Trust on first use: record the presented key as authoritative.
-            if not signing.verify(claimed_pub, sig, canonical):
-                raise HTTPException(status_code=401, detail="invalid signature")
-            pub_b64 = base64.b64encode(claimed_pub).decode()
-            store.put_member(Member(agent_id, agent_id, "sovereign", pub_b64, did_key_hdr))
-
-        useful = trust.EVENT_DELTAS["intent_response_useful"]
-        store.record_trust_event(agent_id, "intent_response_useful", useful)
-        # The server attests the interaction with a signed receipt — its
-        # endorsement of the member (issuer=server → counterparty=member),
-        # which is what the reputation layer reads. Emission is default, not opt-in.
-        receipt = emit_server_receipt(
-            server_did,
-            category="attestation_issued",
-            human_summary=f"Attested a useful intent response from member {agent_id}"[:280],
-            counterparty_did=did_key_hdr,
-            counterparty_label=agent_id,
+            receipt = emit_server_receipt(
+                server_did,
+                category="attestation_received",
+                human_summary=f"Received feedback from member {caller}"[:280],
+                counterparty_did=signer.did_key,
+                counterparty_label=caller,
+            )
+        return JSONResponse(
+            {
+                "recorded": True,
+                "agent_id": caller,
+                "subject": subject,
+                "credited": credited,
+                "receipt_id": receipt["receipt_id"],
+            }
         )
-        return JSONResponse({"recorded": True, "agent_id": agent_id, "receipt_id": receipt["receipt_id"]})
 
     @app.get("/api/agents/{agent_id}/trust")
     def trust_dossier(agent_id: str) -> JSONResponse:
@@ -365,14 +517,12 @@ def create_app(
         The receipt is self-authenticating — its Ed25519 signature over the
         canonical bytes binds it to ``issuer_did`` no matter who POSTs it — so
         the server trusts the envelope, not the transport. `sm_arp` owns the
-        verification; on failure nothing is written.
+        verification; on failure nothing is written. The log is append-only:
+        a rewrite or a chain fork is refused with 409.
         """
-        try:
-            receipt = await req.json()
-        except Exception:
-            return JSONResponse({"error": "body is not valid JSON"}, status_code=400)
-        if not isinstance(receipt, dict):
-            return JSONResponse({"error": "receipt must be a JSON object"}, status_code=400)
+        receipt = await _json_object(req)
+        if isinstance(receipt, JSONResponse):
+            return receipt
 
         # Resolve the per-issuer predecessor for the hash chain (§6.4), if declared.
         prev = receipt.get("previous_receipt_hash")
@@ -388,7 +538,10 @@ def create_app(
             # request — mirror /api/members/rotate: HTTP 200 with an {"error": ...} body.
             return JSONResponse({"error": f"{result.stage}: {result.detail}"})
 
-        link = store.append_receipt(receipt)
+        try:
+            link = store.append_receipt(receipt)
+        except ReceiptConflict as exc:
+            return JSONResponse({"error": exc.reason, "receipt_id": receipt["receipt_id"]}, status_code=409)
         return JSONResponse({"accepted": True, "receipt_id": receipt["receipt_id"], "chain_link": link})
 
     @app.get("/api/receipts/recent")
@@ -461,7 +614,7 @@ def create_app(
             "a2a_url": f"{base_url}/api",
             "checkpoint": f"{base_url}/api/checkpoint",
             "registries": {},
-            "protocol_versions": ["0.2", "0.3"],
+            "protocol_versions": list(PROTOCOL_VERSIONS),
         }
         if conformance_badge_doc is not None:
             doc["conformance"] = f"{base_url}/.well-known/conformance.json"
@@ -485,7 +638,7 @@ def create_app(
 
     @app.get("/api/federation")
     def federation() -> dict[str, object]:
-        # v0.1 is a solo, federation-ready server: no peers wired yet, shape is final.
+        # A solo, federation-ready server: no peers wired yet, shape is final.
         servers: dict[str, object] = {}
         return {
             "self": {"agent_id": chapter_id, "did": server_did},
@@ -494,7 +647,10 @@ def create_app(
         }
 
     @app.get("/api/federation/{peer_id}/members")
-    def federation_members(peer_id: str) -> JSONResponse:
+    async def federation_members(peer_id: str, req: Request) -> JSONResponse:
+        # Authorisation before peer resolution: an anonymous caller learns neither
+        # the members nor which peers exist (§4.12).
+        verify_signed_request(req, await req.body(), store, tofu=tofu_allowed)
         if peer_id == chapter_id:
             members = store.list_members(1000)
             return JSONResponse(
