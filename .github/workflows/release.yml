@@ -5,13 +5,26 @@
 # mint a short-lived OIDC token PyPI accepts. See PUBLISHING.md for the one-time
 # setup and the exact values to type into PyPI's "Add a publisher" form.
 #
-# Fires only when a tag like `v0.1.0` is pushed — never on normal commits.
+# Fires on a pushed version tag or a manual run, never on normal commits.
+#
+# Two ways to release:
+#   1. Push a tag like `v1.2.3` (the original path).
+#   2. Run it by hand: Actions -> this workflow -> Run workflow, or
+#      `gh workflow run <file> -f version=1.2.3`. The run refuses unless
+#      pyproject.toml on the chosen ref declares exactly that version and no tag
+#      for it exists yet; it publishes, then creates the matching `v<version>` tag.
 name: release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish. Must equal pyproject.toml on the selected ref, e.g. 0.2.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +46,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check the requested version (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          WANT: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$WANT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]*)?$'; then
+            echo "::error::'$WANT' is not a version"; exit 1
+          fi
+          have=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "$have" != "$WANT" ]; then
+            echo "::error::pyproject.toml on this ref declares $have, not $WANT; refusing to publish"; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$WANT" >/dev/null; then
+            echo "::error::tag v$WANT already exists; release it by tag, not by hand"; exit 1
+          fi
+
       - name: Build sdist + wheel
         run: |
           python -m pip install --upgrade build
@@ -46,3 +75,27 @@ jobs:
       - name: Publish to PyPI
         # No `with: password:` — the action uses the OIDC token automatically.
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Re-running a version already on PyPI is a no-op, not a red run.
+          skip-existing: true
+
+  tag:
+    # Manual runs publish first, then record the release as a tag on the exact
+    # commit that was built. A tag pushed with GITHUB_TOKEN does not re-trigger
+    # this workflow, so the tag path cannot publish the same version twice.
+    name: Tag the published version
+    needs: publish
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create v<version> at the published commit
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" "$GITHUB_SHA" -m "v$VERSION"
+          git push origin "v$VERSION"
